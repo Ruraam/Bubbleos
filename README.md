@@ -43,7 +43,38 @@ The current image provides a **bootable UEFI system with systemd**:
 Package-driven generation activation, rollback at boot and the ULPM install
 flow are not integrated yet.
 
+| Feature | Status |
+|---|---|
+| Boot to login (UEFI + systemd) | ✅ Working |
+| Generation tracking (`bubble status`) | ✅ Working |
+| Multiple generations (A/B boot) | ❌ Not yet |
+| Rollback at boot | ❌ Not yet |
+| ULPM install flow | ❌ Not yet |
+| Immutable `/usr` | ❌ Not yet (Debian rootfs) |
+
+## How it differs
+
+- **NixOS** uses Nix expressions for the whole system; BubbleOS uses imperative LPK packages with declarative generations.
+- **Fedora Silverblue** uses OSTree + rpm-ostree; BubbleOS uses plain ext4 + ULPM, without an image-based update daemon.
+- **Vanilla OS** uses Distrobox for app isolation; BubbleOS uses ULPM's native rootless model when available.
+
+---
+
 ## Quick start
+
+### Prerequisites
+
+**Host OS:** Debian 12+ or Ubuntu 22.04+ (other distros may work but are untested).
+
+**Required packages:**
+```bash
+sudo apt install build-essential bc bison flex \
+    libssl-dev libelf-dev libncurses-dev \
+    debootstrap qemu-system-x86 qemu-utils \
+    dosfstools mtools parted ovmf
+```
+Disk space: ~10 GB for a full build (kernel + rootfs + image).
+RAM: ≥ 2 GB (kernel build needs ~1.5 GB with -j$(nproc)).
 
 ```bash
 ./build/build-kernel.sh          # kernel + modules -> out/kernel/
