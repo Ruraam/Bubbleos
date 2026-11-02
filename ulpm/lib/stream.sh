@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# lib/stream.sh - Ephemeral RAM Streaming Engine
+# ULPM v6.1.0 — Session mode passthrough (via cmd_run) transparent
+# ==============================================================================
+
+resolve_stream_url() {
+    local uri="${1:-}"
+
+    [[ -n "$uri" ]] || {
+        error "A stream URL, local package, or GitHub repository is required."
+        return 1
+    }
+
+    if [[ "$uri" =~ ^https?:// ]]; then
+        printf '%s\n' "$uri"
+        return 0
+    fi
+
+    if [[ "$uri" == file://* ]]; then
+        local local_path="${uri#file://}"
+        if declare -F normalize_target >/dev/null 2>&1; then
+            local_path="$(normalize_target "$uri" 2>/dev/null || printf '%s' "$local_path")"
+            local_path="${local_path#file://}"
+        fi
+        local resolved
+        resolved="$(realpath -e -- "$local_path" 2>/dev/null || true)"
+        [[ -n "$resolved" && -f "$resolved" && -r "$resolved" ]] || {
+            error "The file URI does not refer to a readable regular file: $local_path"
+            return 1
+        }
+        printf 'file://%s\n' "$resolved"
+        return 0
+    fi
+
+    if [[ -f "$uri" ]]; then
+        local resolved
+        resolved="$(realpath -e -- "$uri" 2>/dev/null || true)"
+        [[ -n "$resolved" && -f "$resolved" && -r "$resolved" ]] || {
+            error "Cannot access local package file: $uri"
+            return 1
+        }
+        printf 'file://%s\n' "$resolved"
+        return 0
+    fi
+
+    if [[ "$uri" =~ ^([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)(@([A-Za-z0-9._-]+))?$ ]]; then
+        check_dependencies curl jq || return 1
+
+        local owner="${BASH_REMATCH[1]}"
+        local repo="${BASH_REMATCH[2]}"
+        local tag="${BASH_REMATCH[4]:-}"
+        local endpoint="releases/latest"
+        if [[ -n "$tag" ]]; then
+            endpoint="releases/tags/${tag}"
+        fi
+
+        local raw_arch host_arch arch_regex universal_regex
+        raw_arch="$(detect_arch 2>/dev/null || uname -m)"
+        host_arch="$(normalize_arch_name "$raw_arch" 2>/dev/null || echo "$raw_arch")"
+
+        case "${host_arch,,}" in
+            amd64|x86_64|x86-64)
+                arch_regex='(^|[._+ -])(amd64|x86_64|x86-64|x64)([._+ -]|$)'
+                ;;
+            arm64|aarch64)
+                arch_regex='(^|[._+ -])(arm64|aarch64|arm-64|armv8)([._+ -]|$)'
+                ;;
+            armhf|armv7|armv7l)
+                arch_regex='(^|[._+ -])(armhf|armv7|armv7l|arm32)([._+ -]|$)'
+                ;;
+            i386|i686|x86)
+                arch_regex='(^|[._+ -])(i386|i686|x86)([._+ -]|$)'
+                ;;
+            *)
+                arch_regex="(^|[._+ -])(${host_arch})([._+ -]|$)"
+                ;;
+        esac
+        universal_regex='(^|[._+ -])(all|any|universal|noarch|no-arch)([._+ -]|$)'
+
+        log "Resolving GitHub release for ${owner}/${repo} (${host_arch})..."
+        local release_json
+        release_json="$(fetch_github_api "repos/${owner}/${repo}/${endpoint}" 15)" || {
+            error "Failed to fetch GitHub release metadata for '${owner}/${repo}'."
+            return 1
+        }
+
+        local download_url
+        download_url="$(jq -er --arg arch_re "$arch_regex" --arg universal_re "$universal_regex" '
+            if (.assets | type) != "array" then error("missing assets array") else . end
+            | ([.assets[]? | select((.name | type) == "string")
+               | select(.name | test("\\.lpk$"; "i"))
+               | select(.name | test($arch_re; "i"))
+               | .browser_download_url? | select(type == "string")][0] // empty)
+            // ([.assets[]? | select((.name | type) == "string")
+               | select(.name | test("\\.lpk$"; "i"))
+               | select(.name | test($universal_re; "i"))
+               | .browser_download_url? | select(type == "string")][0] // empty)
+            // ([.assets[]? | select((.name | type) == "string")
+               | select(.name | test("\\.lpk$"; "i"))
+               | .browser_download_url? | select(type == "string")][0] // empty)
+            // empty
+        ' <<< "$release_json" 2>/dev/null)" || download_url=""
+
+        if [[ -z "$download_url" ]]; then
+            error "No .lpk release asset found in ${owner}/${repo} for architecture '${host_arch}'."
+            return 1
+        fi
+
+        if [[ ! "$download_url" =~ ^https://(([a-zA-Z0-9._-]+\.)?githubusercontent\.com|github\.com)/ ]]; then
+            error "GitHub returned an unexpected asset download URL: $download_url"
+            return 1
+        fi
+
+        printf '%s\n' "$download_url"
+        return 0
+    fi
+
+    error "Unsupported stream source. Use an HTTP(S) URL, local .lpk file, or owner/repo[@tag]."
+    return 1
+}
+
+cmd_stream() (
+    local source_input="${1:-}"
+    if [[ -z "$source_input" ]]; then
+        error "Usage: ulpm stream <url|local.lpk|owner/repo[@tag]> [sandbox_flags] [--session-mode <mode>] [-- app_args...]"
+        return 1
+    fi
+    shift
+
+    check_dependencies curl || return 1
+
+    local target_url
+    target_url="$(resolve_stream_url "$source_input")" || return 1
+
+    local ram_base="/dev/shm"
+    local free_kb=0
+    if [[ -d "$ram_base" && -w "$ram_base" ]]; then
+        free_kb="$(df -k "$ram_base" 2>/dev/null | awk 'NR>1 {print $4}' | head -n 1)"
+        [[ "$free_kb" =~ ^[0-9]+$ ]] || free_kb=0
+    fi
+
+    if (( free_kb < 262144 )) || [[ ! -w "$ram_base" ]]; then
+        ram_base="${XDG_RUNTIME_DIR:-${ULPM_CACHE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/ulpm}/tmp}"
+    fi
+    mkdir -p -- "$ram_base" 2>/dev/null || ram_base="/tmp"
+
+    local tmp_lpk=""
+    tmp_lpk="$(
+        umask 077
+        mktemp "${ram_base%/}/ulpm_stream_XXXXXX.lpk"
+    )" || {
+        error "Unable to create volatile package in '$ram_base'."
+        return 1
+    }
+
+    # shellcheck disable=SC2329
+    _ulpm_stream_cleanup() {
+        if [[ -n "${tmp_lpk:-}" && -f "$tmp_lpk" ]]; then
+            if command -v shred >/dev/null 2>&1; then
+                shred -u "$tmp_lpk" 2>/dev/null || rm -f -- "$tmp_lpk"
+            else
+                : > "$tmp_lpk" 2>/dev/null || true
+                rm -f -- "$tmp_lpk"
+            fi
+            tmp_lpk=""
+        fi
+    }
+
+    trap '_ulpm_stream_cleanup' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
+
+    log "Streaming package into volatile storage ($ram_base)..."
+
+    local curl_opts=(-fL --retry 2 --connect-timeout 20)
+    if [[ -t 2 ]]; then
+        curl_opts+=(--progress-bar)
+    else
+        curl_opts+=(-sS)
+    fi
+
+    local auth_header=() token
+    if declare -F get_github_token >/dev/null 2>&1 && token="$(get_github_token)"; then
+        auth_header=(-H "Authorization: Bearer $token")
+    fi
+
+    if [[ "$target_url" == file://* ]]; then
+        local source_file="${target_url#file://}"
+        if ! cp -- "$source_file" "$tmp_lpk"; then
+            error "Failed to copy local package: $source_file"
+            return 1
+        fi
+    elif ! curl "${auth_header[@]}" "${curl_opts[@]}" "$target_url" -o "$tmp_lpk"; then
+        error "Failed to stream package from: $target_url"
+        return 1
+    fi
+
+    if [[ ! -s "$tmp_lpk" ]]; then
+        error "Streamed package payload is empty."
+        return 1
+    fi
+
+    if ! declare -F cmd_run >/dev/null 2>&1; then
+        error "The ULPM run dispatcher (cmd_run) is unavailable."
+        return 1
+    fi
+
+    # Forward directly to cmd_run: it natively handles sandbox flags (including
+    # --session-mode) regardless of their position, and app args after '--'.
+    cmd_run "$tmp_lpk" "$@"
+)
