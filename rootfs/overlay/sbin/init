@@ -1,0 +1,40 @@
+#!/bin/sh
+# ==============================================================================
+# bubbleOS - development RootFS init (Phase 1.3, step 2)
+# ==============================================================================
+# Temporary PID 1 until a real service manager is integrated. It prepares the
+# runtime filesystems and hands over to a root shell on the console.
+# ==============================================================================
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export HOME=/root
+export TERM=linux
+
+mountpoint -q /proc || mount -t proc proc /proc
+mountpoint -q /sys || mount -t sysfs sysfs /sys
+
+if ! mountpoint -q /dev; then
+    mount -t devtmpfs devtmpfs /dev 2>/dev/null || mount -t tmpfs tmpfs /dev
+fi
+
+mkdir -p /dev/pts /dev/shm /run /tmp
+mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts 2>/dev/null || true
+mountpoint -q /dev/shm || mount -t tmpfs tmpfs /dev/shm 2>/dev/null || true
+mountpoint -q /run || mount -t tmpfs tmpfs /run 2>/dev/null || true
+mountpoint -q /tmp || mount -t tmpfs tmpfs /tmp 2>/dev/null || true
+
+hostname bubbleos 2>/dev/null || true
+
+printf '\n'
+printf '  ____        _     _        ____  _____\n'
+printf ' | __ ) _   _| |__ | | ___  / ___||  ___|\n'
+printf " |  _ \\| | | | '_ \\| |/ _ \\ \\___ \\| |___\n"
+printf ' | |_) | |_| | |_) | |  __/  ___) |___ |\n'
+printf ' |____/ \\__,_|_.__/|_|\\___| |____/_____|\n'
+printf '\n'
+printf 'Welcome to bubbleOS (development RootFS)\n\n'
+printf 'Kernel: %s\n' "$(uname -r)"
+printf 'Root:   %s\n\n' "$(awk '$2 == "/" {print $1; exit}' /proc/mounts)"
+
+export PS1='[root@bubbleos]# '
+exec /bin/sh
