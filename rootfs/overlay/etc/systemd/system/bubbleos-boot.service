@@ -1,0 +1,15 @@
+[Unit]
+Description=BubbleOS boot generation activation
+Documentation=https://github.com/Ruraam/BubbleOS
+After=local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/bubble boot
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
