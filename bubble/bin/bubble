@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+    SOURCE_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+    SOURCE="$(readlink -- "$SOURCE")"
+    [[ "$SOURCE" == /* ]] || SOURCE="${SOURCE_DIR}/${SOURCE}"
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+BUBBLE_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+REPO_DIR="$(cd -- "${BUBBLE_DIR}/.." && pwd)"
+
+# Prefer an installed configuration, then use the repository configuration.
+if [[ -r /etc/bubbleos/bubble.conf ]]; then
+    # shellcheck disable=SC1091
+    source /etc/bubbleos/bubble.conf
+elif [[ -r "${REPO_DIR}/config/bubble.conf" ]]; then
+    # shellcheck disable=SC1091
+    source "${REPO_DIR}/config/bubble.conf"
+fi
+
+# In a source checkout, fall back to the vendored ULPM tree.
+if [[ ! -r "${BUBBLEOS_ULPM_DIR:-}/bin/ulpm" && -r "${REPO_DIR}/ulpm/bin/ulpm" ]]; then
+    BUBBLEOS_ULPM_DIR="${REPO_DIR}/ulpm"
+fi
+
+# shellcheck disable=SC1091
+source "${BUBBLE_DIR}/lib/paths.sh"
+# shellcheck disable=SC1091
+source "${BUBBLE_DIR}/lib/generation.sh"
+# shellcheck disable=SC1091
+source "${BUBBLE_DIR}/lib/system.sh"
+
+usage() {
+    cat <<'USAGE'
+Usage: bubble <command>
+
+Commands:
+  bootstrap       Initialize the BubbleOS state and first generation
+  boot            Activate the current generation at boot (internal)
+  status          Show BubbleOS system status
+  generations     List system generations
+  rollback        Activate the previous generation (metadata-level scaffold)
+  help            Show this help
+
+The package-driven system installer is not implemented yet.
+USAGE
+}
+
+cmd="${1:-help}"
+case "$cmd" in
+    bootstrap)
+        bubble_system_bootstrap
+        ;;
+    boot)
+        bubble_system_boot
+        ;;
+    status)
+        bubble_system_status
+        ;;
+    generations)
+        bubble_generation_list
+        ;;
+    rollback)
+        bubble_require_root
+        previous="$(bubble_generation_previous)" || {
+            printf 'bubble: no previous generation available\n' >&2
+            exit 1
+        }
+        bubble_generation_activate "$previous"
+        printf 'Activated generation %s\n' "$previous"
+        ;;
+    help|-h|--help)
+        usage
+        ;;
+    *)
+        printf 'bubble: unknown command: %s\n\n' "$cmd" >&2
+        usage >&2
+        exit 2
+        ;;
+esac
