@@ -1,4 +1,8 @@
-BubbleOS is an experimental Linux operating system built around the Linux kernel and the ULPM/LPK ecosystem.
+<div align="center">
+<img src="https://raw.githubusercontent.com/Ruraam/Bubbleos/5a6cc5b1f9812674dcfc11f04e8ee0af17e24ed6/assets/bubbleos-logo.svg" width="460" />
+<h1>BubbleOS is an experimental Linux operating system built around the Linux kernel and the ULPM/LPK ecosystem.</h1>
+
+</div>
 
 ## Project principles
 
