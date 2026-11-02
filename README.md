@@ -73,3 +73,13 @@ sudo ROOT_IMAGE=out/bubbleos-root.img ./build/run-qemu.sh
 ```
 
 See [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md) for details and overrides.
+
+## License
+
+BubbleOS is licensed under the GNU General Public License v3.0 — see [LICENSE](LICENSE) for details.
+
+Components:
+- `ulpm/` — GPL-3.0 (inherits from ULPM upstream)
+- `bubble/` — GPL-3.0
+- `build/`, `initramfs/`, `boot/` — GPL-3.0
+
