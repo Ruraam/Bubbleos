@@ -121,3 +121,12 @@ Components:
 - `bubble/` — GPL-3.0
 - `build/`, `initramfs/`, `boot/` — GPL-3.0
 
+---
+
+*My other projects*
+
+*[Universal Linux Package Manager [ULPM]](https://github.com/Ruraam/ulpm): 3⭐ - Lightweight, rootless, zero-daemon, sandboxed `application/read-only OS runtime` for any Linux distribution. Lighter than Flatpak or Snap.*
+
+*[debup - Hybrid Package Manager](https://github.com/Ruraam/debup): 3⭐ - The missing bridge between `GitHub & APT` for Debian/Ubuntu-based distributions, WSL, Android Linux Terminal. Discover, search, track, install, and upgrade.deb packages directly from APT & GitHub Releases on `all architectures` simultaneously.*
+
+*[Universal Ruvomain ADB App Manager [URAAM]](https://github.com/Ruraam/Uraam): 50⭐ - An all-in-one shell toolkit for `Android debloating`. Uninstall/disable your apps, backup your debloat apps JSON file & revert/restore, install apk. Works with `Termux WirelessADB, Shizuku, Root`, `Linux Debian, Arch, Fedora, macOS & WSL`. Compatible with Canta/UAD JSON lists.*
