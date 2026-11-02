@@ -123,10 +123,16 @@ Components:
 
 ---
 
-*My other projects*
+##🛠️ Related Projects
 
-*[Universal Linux Package Manager [ULPM]](https://github.com/Ruraam/ulpm): 3⭐ - Lightweight, rootless, zero-daemon, sandboxed `application/read-only OS runtime` for any Linux distribution. Lighter than Flatpak or Snap.*
+* [**ULPM (Universal Linux Package Manager)**](https://github.com/Ruraam/ulpm)
+[![GitHub stars](https://img.shields.io/github/stars/Ruraam/ulpm?style=flat-square&color=yellow)](https://github.com/Ruraam/ulpm/stargazers)
+Lightweight, rootless, zero-daemon, sandboxed application/read-onlyOS runtime for any Linux distribution. Lighter than Flatpak or Snap.
 
-*[debup - Hybrid Package Manager](https://github.com/Ruraam/debup): 3⭐ - The missing bridge between `GitHub & APT` for Debian/Ubuntu-based distributions, WSL, Android Linux Terminal. Discover, search, track, install, and upgrade.deb packages directly from APT & GitHub Releases on `all architectures` simultaneously.*
+* [**debup — Hybrid Package Manager**](https://github.com/Ruraam/debup)
+[![GitHub stars](https://img.shields.io/github/stars/Ruraam/debup?style=flat-square&color=yellow)](https://github.com/Ruraam/debup/stargazers)
+The missing bridge between GitHub &APT for Debian/Ubuntu-based distributions, WSL, and Android Linux Terminal. Discover, search, track, install, and upgrade `.deb` packagesdirectly from APT & GitHub Releases on all architectures simultaneously.
 
-*[Universal Ruvomain ADB App Manager [URAAM]](https://github.com/Ruraam/Uraam): 50⭐ - An all-in-one shell toolkit for `Android debloating`. Uninstall/disable your apps, backup your debloat apps JSON file & revert/restore, install apk. Works with `Termux WirelessADB, Shizuku, Root`, `Linux Debian, Arch, Fedora, macOS & WSL`. Compatible with Canta/UAD JSON lists.*
+* [**URAAM (Universal Ruvomain ADB AppManager)**](https://github.com/Ruraam/uraam)
+[![GitHub stars](https://img.shields.io/github/stars/Ruraam/uraam?style=flat-square&color=yellow)](https://github.com/Ruraam/uraam/stargazers)
+An all-in-one shelltoolkit for Android debloating. Uninstall/disable your apps, backup your debloat apps JSON file & revert/restore, install apk.Works with Termux WirelessADB, Shizuku, Root, Linux Debian, Arch, Fedora, macOS & WSL.Compatible with Canta/UAD JSON lists.
