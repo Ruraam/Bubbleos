@@ -1,0 +1,98 @@
+#!/bin/sh
+# ==============================================================================
+# bubbleOS - initramfs init (Phase 1.3)
+# ==============================================================================
+# Mounts the pseudo-filesystems, loads the storage drivers, finds the bubbleOS
+# RootFS and switches to it. Without a root device it falls back to a BusyBox
+# shell (Phase 1.3, step 1 behaviour).
+# ==============================================================================
+
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export HOME=/root
+
+mkdir -p /proc /sys /dev /tmp /run /root /newroot
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+
+if ! mount -t devtmpfs devtmpfs /dev 2>/dev/null; then
+    mount -t tmpfs tmpfs /dev
+    mdev -s
+fi
+
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts 2>/dev/null || true
+mount -t tmpfs tmpfs /dev/shm 2>/dev/null || true
+mount -t tmpfs tmpfs /tmp 2>/dev/null || true
+mount -t tmpfs tmpfs /run 2>/dev/null || true
+
+# Storage drivers are modules in the Debian kernel: load them before probing.
+# ext4 needs a crc32c implementation; its name varies between kernel series.
+modprobe crc32c-cryptoapi 2>/dev/null || true
+modprobe crc32c-intel 2>/dev/null || modprobe crc32c_generic 2>/dev/null || true
+modprobe ext4 2>/dev/null || true
+modprobe virtio_blk 2>/dev/null || true
+modprobe ata_piix 2>/dev/null || true
+modprobe ahci 2>/dev/null || true
+modprobe sd_mod 2>/dev/null || true
+
+# root= wins; otherwise probe the usual QEMU disk names.
+root_device=""
+for arg in $(cat /proc/cmdline); do
+    case "$arg" in
+        root=*) root_device="${arg#root=}" ;;
+    esac
+done
+
+if [ -z "$root_device" ]; then
+    for candidate in /dev/vda /dev/sda /dev/vda1 /dev/sda1; do
+        if [ -b "$candidate" ]; then
+            root_device="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -n "$root_device" ]; then
+    printf 'bubbleOS: waiting for root device %s\n' "$root_device"
+    retries=0
+    while [ ! -b "$root_device" ] && [ "$retries" -lt 30 ]; do
+        sleep 0.2
+        retries=$((retries + 1))
+    done
+fi
+
+if [ -n "$root_device" ] && [ -b "$root_device" ]; then
+    printf 'bubbleOS: mounting %s on /newroot\n' "$root_device"
+    mkdir -p /newroot
+    if mount -t ext4 -o rw "$root_device" /newroot; then
+        mkdir -p /newroot/proc /newroot/sys /newroot/dev
+        mount --move /proc /newroot/proc
+        mount --move /sys /newroot/sys
+        mount --move /dev /newroot/dev
+        printf 'bubbleOS: switching root\n\n'
+        exec switch_root /newroot /sbin/init
+    fi
+    printf 'bubbleOS: failed to mount %s, dropping to rescue shell\n' "$root_device" >&2
+fi
+
+cat <<'BANNER'
+
+  ____        _     _        ____  _____
+ | __ ) _   _| |__ | | ___  / ___||  ___|
+ |  _ \| | | | '_ \| |/ _ \ \___ \| |___
+ | |_) | |_| | |_) | |  __/  ___) |___ |
+ |____/ \__,_|_.__/|_|\___| |____/_____|
+
+ bubbleOS initramfs - development
+
+BANNER
+
+printf 'Kernel: %s\n' "$(uname -r)"
+printf 'No RootFS found, dropping to an initramfs shell.\n'
+printf 'Welcome to bubbleOS!\n\n'
+
+hostname bubbleos 2>/dev/null || true
+export PS1='[root@bubbleos /]# '
+
+exec /bin/sh
