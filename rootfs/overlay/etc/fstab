@@ -1,0 +1,7 @@
+# bubbleOS development fstab
+# The root filesystem is mounted by the initramfs; only runtime filesystems are
+# listed here.
+proc     /proc     proc     defaults           0 0
+sysfs    /sys      sysfs    defaults           0 0
+devpts   /dev/pts  devpts   gid=5,mode=620     0 0
+tmpfs    /tmp      tmpfs    defaults           0 0
