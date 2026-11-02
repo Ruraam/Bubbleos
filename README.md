@@ -72,7 +72,14 @@ For a direct-kernel boot without firmware:
 sudo ROOT_IMAGE=out/bubbleos-root.img ./build/run-qemu.sh
 ```
 
-See [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md) for details and overrides.
+## Contributing
+
+BubbleOS is early-stage and evolving quickly. Contributions are welcome:
+- **Bug reports**: [open an issue](https://github.com/Ruraam/Bubbleos/issues/new)
+- **Discussions**: [GitHub Discussions](https://github.com/Ruraam/Bubbleos/discussions)
+- **Code**: fork, create a topic branch, open a PR against `main`
+
+Before contributing, read [docs/BOOTSTRAP.md](docs/BOOTSTRAP.md) to understand the build pipeline.
 
 ## License
 
