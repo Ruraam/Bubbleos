@@ -10,9 +10,11 @@
 : "${BUBBLEOS_RUN_DIR:=/run/bubbleos}"
 : "${BUBBLEOS_CHANNEL:=development}"
 : "${BUBBLEOS_ULPM_DIR:=/opt/bubbleos/ulpm}"
-: "${BUBBLEOS_GENERATIONS_DIR:=${BUBBLEOS_STATE_DIR}/generations}"
-: "${BUBBLEOS_CURRENT_LINK:=${BUBBLEOS_STATE_DIR}/current}"
-: "${BUBBLEOS_PREVIOUS_LINK:=${BUBBLEOS_STATE_DIR}/previous}"
+: "${BUBBLEOS_ROOTFS_MOUNT:=${BUBBLEOS_STATE_DIR}/rootfs}"
+: "${BUBBLEOS_SNAPSHOTS_DIR:=/snapshots}"
+: "${BUBBLEOS_GENERATIONS_DIR:=${BUBBLEOS_ROOTFS_MOUNT}/generations}"
+: "${BUBBLEOS_CURRENT_LINK:=${BUBBLEOS_ROOTFS_MOUNT}/current}"
+: "${BUBBLEOS_PREVIOUS_LINK:=${BUBBLEOS_ROOTFS_MOUNT}/previous}"
 
 bubble_require_root() {
     if (( EUID != 0 )); then
@@ -21,10 +23,35 @@ bubble_require_root() {
     fi
 }
 
+bubble_require_generation_layout() {
+    command -v btrfs >/dev/null 2>&1 || {
+        printf 'bubble: the btrfs command is unavailable (install btrfs-progs)\n' >&2
+        return 1
+    }
+    mountpoint -q "$BUBBLEOS_ROOTFS_MOUNT" || {
+        printf 'bubble: %s is not mounted (is the @rootfs subvolume available?)\n' \
+            "$BUBBLEOS_ROOTFS_MOUNT" >&2
+        return 1
+    }
+    [[ -d "$BUBBLEOS_GENERATIONS_DIR" ]] || {
+        printf 'bubble: generation directory is missing: %s\n' \
+            "$BUBBLEOS_GENERATIONS_DIR" >&2
+        return 1
+    }
+}
+
+bubble_require_snapshots_layout() {
+    mountpoint -q "$BUBBLEOS_SNAPSHOTS_DIR" || {
+        printf 'bubble: %s is not mounted (is the @snapshots subvolume available?)\n' \
+            "$BUBBLEOS_SNAPSHOTS_DIR" >&2
+        return 1
+    }
+}
+
 bubble_init_paths() {
     mkdir -p \
         "$BUBBLEOS_STATE_DIR" \
-        "$BUBBLEOS_GENERATIONS_DIR" \
+        "$BUBBLEOS_ROOTFS_MOUNT" \
         "${BUBBLEOS_STATE_DIR}/transactions" \
         "${BUBBLEOS_STATE_DIR}/store" \
         "${BUBBLEOS_STATE_DIR}/wal" \
