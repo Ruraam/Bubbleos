@@ -1,0 +1,16 @@
+[Unit]
+Description=bubbleOS restore /var from snapshot
+Documentation=man:bubble(1)
+DefaultDependencies=no
+After=systemd-remount-fs.service
+Before=var.mount local-fs.target
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=-/usr/local/bin/bubble snapshots restore --apply
+TimeoutStartSec=120
+RemainAfterExit=yes
+
+[Install]
+WantedBy=local-fs.target

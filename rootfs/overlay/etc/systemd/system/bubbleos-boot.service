@@ -2,6 +2,7 @@
 Description=BubbleOS boot generation activation
 Documentation=https://github.com/Ruraam/BubbleOS
 After=local-fs.target
+RequiresMountsFor=/var /var/lib/bubbleos/rootfs
 Before=multi-user.target
 
 [Service]
