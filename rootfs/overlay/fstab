@@ -1,0 +1,25 @@
+# bubbleOS development fstab
+#
+# The root filesystem is the current Btrfs generation subvolume. It is mounted
+# by the initramfs after resolving @rootfs/current, so there is deliberately no
+# "/" entry here.
+#
+# Persistent state is split into subvolumes. @home survives rollbacks, @var is
+# snapshotted before a generation activation, and @logs is kept out of the /var
+# snapshot. The UUID placeholder below is rendered by build/bootstrap.sh from
+# config/rootfs.env.
+UUID=@ROOTFS_UUID@      /home                       btrfs  subvol=@home,compress=zstd:1,noatime                      0 0
+UUID=@ROOTFS_UUID@      /var                        btrfs  subvol=@var,compress=zstd:1,noatime                       0 0
+UUID=@ROOTFS_UUID@      /var/log                    btrfs  subvol=@logs,compress=zstd:1,noatime                      0 0
+UUID=@ROOTFS_UUID@      /snapshots                  btrfs  subvol=@snapshots,compress=zstd:1,noatime                 0 0
+UUID=@ROOTFS_UUID@      /var/lib/bubbleos/rootfs    btrfs  subvol=@rootfs,compress=zstd:1,noatime                    0 0
+
+# The EFI System Partition is mounted read-write so `bubble bootloader sync`
+# can regenerate the Limine menu from the live generation list. nofail keeps
+# direct-kernel-boot test images (which have no ESP) bootable.
+UUID=@ESP_UUID@         /boot                       vfat   umask=0077,nofail,x-systemd.device-timeout=2s             0 0
+
+proc     /proc     proc     defaults           0 0
+sysfs    /sys      sysfs    defaults           0 0
+devpts   /dev/pts  devpts   gid=5,mode=620     0 0
+tmpfs    /tmp      tmpfs    defaults           0 0
