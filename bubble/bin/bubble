@@ -32,19 +32,34 @@ source "${BUBBLE_DIR}/lib/paths.sh"
 source "${BUBBLE_DIR}/lib/generation.sh"
 # shellcheck disable=SC1091
 source "${BUBBLE_DIR}/lib/system.sh"
+# shellcheck disable=SC1091
+source "${BUBBLE_DIR}/lib/bootloader.sh"
 
 usage() {
     cat <<'USAGE'
 Usage: bubble <command>
 
 Commands:
-  bootstrap       Initialize the BubbleOS state and first generation
-  boot            Activate the current generation at boot (internal)
-  status          Show BubbleOS system status
+  bootstrap       Initialize the bubbleOS state template (build time)
+  boot            Record the active generation at boot (internal)
+  status          Show bubbleOS system status
   generations     List system generations
-  rollback        Activate the previous generation (metadata-level scaffold)
+  generation list                 List system generations
+  generation create [options]     Clone the current generation
+      --from <gen>                Source generation (default: current)
+      --description <text>        Generation description
+  generation activate <gen>       Select a generation for the next boot
+  generation current              Print the selected generation
+  snapshots       List read-only restore points
+  snapshots prune [--keep N] [--dry-run]
+                  Remove old automatic snapshots (initial points are kept)
+  snapshots restore <name>
+                  Restore /var from a snapshot on the next boot
+  rollback        Select the previous generation for the next boot
+  bootloader sync Regenerate the Limine boot menu from the generations
   help            Show this help
 
+Generations are Btrfs subvolumes under @rootfs/generations.
 The package-driven system installer is not implemented yet.
 USAGE
 }
@@ -63,6 +78,73 @@ case "$cmd" in
     generations)
         bubble_generation_list
         ;;
+    generation)
+        action="${2:-list}"
+        case "$action" in
+            list)
+                bubble_generation_list
+                ;;
+            current)
+                bubble_generation_current
+                ;;
+            create)
+                shift 2
+                gen="$(bubble_generation_create "$@")"
+                printf 'Created generation %s\n' "$gen"
+                bubble_bootloader_sync || true
+                ;;
+            activate)
+                if [[ $# -ne 3 ]]; then
+                    printf 'bubble: generation activate requires exactly one generation number\n\n' >&2
+                    usage >&2
+                    exit 2
+                fi
+                bubble_generation_activate "$3"
+                bubble_bootloader_sync || true
+                printf 'Activated generation %s (reboot required)\n' "$3"
+                ;;
+            help|-h|--help)
+                usage
+                ;;
+            *)
+                printf 'bubble: unknown generation command: %s\n\n' "$action" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    snapshots)
+        action="${2:-list}"
+        case "$action" in
+            list)
+                bubble_snapshot_list
+                ;;
+            prune)
+                shift 2
+                bubble_snapshot_prune "$@"
+                ;;
+            restore)
+                if [[ "${3:-}" == "--apply" ]]; then
+                    bubble_var_restore_apply
+                else
+                    if [[ $# -ne 3 ]]; then
+                        printf 'bubble: snapshots restore requires exactly one snapshot name\n\n' >&2
+                        usage >&2
+                        exit 2
+                    fi
+                    bubble_var_restore_schedule "$3"
+                fi
+                ;;
+            help|-h|--help)
+                usage
+                ;;
+            *)
+                printf 'bubble: unknown snapshots command: %s\n\n' "$action" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+        ;;
     rollback)
         bubble_require_root
         previous="$(bubble_generation_previous)" || {
@@ -70,7 +152,25 @@ case "$cmd" in
             exit 1
         }
         bubble_generation_activate "$previous"
-        printf 'Activated generation %s\n' "$previous"
+        bubble_bootloader_sync || true
+        printf 'Activated generation %s (reboot required)\n' "$previous"
+        ;;
+    bootloader)
+        action="${2:-sync}"
+        case "$action" in
+            sync)
+                bubble_require_root
+                bubble_bootloader_sync
+                ;;
+            help|-h|--help)
+                usage
+                ;;
+            *)
+                printf 'bubble: unknown bootloader command: %s\n\n' "$action" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
         ;;
     help|-h|--help)
         usage
