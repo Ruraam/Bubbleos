@@ -8,6 +8,9 @@
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG="${CONFIG:-$ROOT/config/rootfs.env}"
+# shellcheck disable=SC1090
+source "$CONFIG"
 if [[ -z "${KERNEL:-}" && -r "$ROOT/out/kernel/vmlinuz" ]]; then
     KERNEL="$ROOT/out/kernel/vmlinuz"
 fi
@@ -15,10 +18,11 @@ KERNEL="${KERNEL:-/boot/vmlinuz-$(uname -r)}"
 INITRAMFS="${INITRAMFS:-$ROOT/out/initramfs.cpio.gz}"
 ROOT_IMAGE="${ROOT_IMAGE:-}"
 DISK_IMAGE="${DISK_IMAGE:-}"
-ROOT_DEVICE="${ROOT_DEVICE:-/dev/vda}"
+ROOT_DEVICE="${ROOT_DEVICE:-UUID=$ROOTFS_UUID}"
 UEFI="${UEFI:-1}"
 MEMORY="${MEMORY:-2048}"
 CPUS="${CPUS:-2}"
+APPEND_EXTRA="${APPEND_EXTRA:-}"
 
 die() { printf '[bubbleOS] ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -61,7 +65,8 @@ else
     [[ -r "$KERNEL" ]] || die "Kernel not found: $KERNEL (set KERNEL=...)"
     [[ -r "$INITRAMFS" ]] || die "Initramfs not found: $INITRAMFS (run build/build-initramfs.sh first)"
 
-    append="console=ttyS0,115200 rdinit=/init panic=1"
+    append="console=ttyS0,115200 selinux=0 rdinit=/init panic=1"
+    [[ -z "$APPEND_EXTRA" ]] || append+=" $APPEND_EXTRA"
     cmd+=(
         -kernel "$KERNEL"
         -initrd "$INITRAMFS"
@@ -70,7 +75,7 @@ else
     if [[ -n "$ROOT_IMAGE" ]]; then
         [[ -r "$ROOT_IMAGE" ]] || die "RootFS image not found: $ROOT_IMAGE"
         cmd+=(-drive "file=$ROOT_IMAGE,format=raw,if=virtio")
-        append+=" root=$ROOT_DEVICE rootfstype=ext4 rw"
+        append+=" root=$ROOT_DEVICE rootfstype=btrfs rw"
     fi
 
     cmd+=(-append "$append")

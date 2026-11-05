@@ -20,9 +20,11 @@ fi
 KERNEL_RELEASE="${KERNEL_RELEASE:-$(uname -r)}"
 MODULE_ROOT="${MODULE_ROOT:-/}"
 MODULE_DIR="${MODULE_DIR:-${MODULE_ROOT%/}/lib/modules/${KERNEL_RELEASE}}"
-MODULES="${MODULES:-ext4 virtio_blk ata_piix ahci sd_mod}"
+MODULES="${MODULES:-btrfs ext4 virtio_blk ata_piix ahci sd_mod}"
 MODPROBE="${MODPROBE:-/usr/sbin/modprobe}"
 DEPMOD="${DEPMOD:-/usr/sbin/depmod}"
+FIRMWARE_DIR="${FIRMWARE_DIR:-$ROOT/../firmware}"
+MICROCODE="${MICROCODE:-1}"
 KERNEL_OUT="$STAGE/lib/modules/${KERNEL_RELEASE}"
 
 log() { printf '[bubbleOS] %s\n' "$*"; }
@@ -35,7 +37,7 @@ command -v gzip >/dev/null 2>&1 || die "Missing required command: gzip"
 
 log "Staging initramfs in $STAGE"
 rm -rf "$STAGE"
-mkdir -p "$STAGE"/{bin,sbin,etc,proc,sys,dev,tmp,run,root,newroot}
+mkdir -p "$STAGE"/{bin,sbin,etc,proc,sys,dev,tmp,run,root,newroot,mnt}
 
 log "Installing BusyBox applets"
 cp "$BUSYBOX" "$STAGE/bin/busybox"
@@ -102,6 +104,53 @@ fi
 
 log "Creating $ARCHIVE"
 ( cd "$STAGE" && find . -print0 | cpio --null -o --format=newc 2>/dev/null | gzip -9 ) > "$ARCHIVE"
+
+# ------------------------------------------------------------------------------
+# Early microcode
+# ------------------------------------------------------------------------------
+# The kernel reads an uncompressed cpio archive prepended to the initramfs and
+# looks for kernel/x86/microcode/{GenuineIntel,AuthenticAMD}.bin. Concatenating
+# the vendor files is the format documented by the kernel. The main initramfs
+# stays compressed and follows the early archive.
+if [[ "$MICROCODE" == "1" ]]; then
+    amd_ucode_dir="$(find "$FIRMWARE_DIR" -type d -path '*/usr/lib/firmware/amd-ucode' -print -quit 2>/dev/null || true)"
+    intel_ucode_dir="$(find "$FIRMWARE_DIR" -type d -path '*/usr/lib/firmware/intel-ucode' -print -quit 2>/dev/null || true)"
+    amd_ucode_files=()
+    intel_ucode_files=()
+    if [[ -d "$amd_ucode_dir" ]]; then
+        mapfile -d '' amd_ucode_files < <(
+            find "$amd_ucode_dir" -maxdepth 1 -type f -name 'microcode_amd*.bin' -print0 | sort -z
+        )
+    fi
+    if [[ -d "$intel_ucode_dir" ]]; then
+        mapfile -d '' intel_ucode_files < <(
+            find "$intel_ucode_dir" -maxdepth 1 -type f -print0 | sort -z
+        )
+    fi
+
+    if (( ${#amd_ucode_files[@]} > 0 || ${#intel_ucode_files[@]} > 0 )); then
+        log "Prepending early microcode (${#amd_ucode_files[@]} AMD, ${#intel_ucode_files[@]} Intel files)"
+        ucode_stage="$(mktemp -d "${TMPDIR:-/tmp}/bubbleos-ucode.XXXXXXXX")"
+        trap 'rm -rf -- "$ucode_stage"' EXIT
+        install -d -m 0755 "$ucode_stage/kernel/x86/microcode"
+        if (( ${#amd_ucode_files[@]} > 0 )); then
+            cat -- "${amd_ucode_files[@]}" > "$ucode_stage/kernel/x86/microcode/AuthenticAMD.bin"
+        fi
+        if (( ${#intel_ucode_files[@]} > 0 )); then
+            cat -- "${intel_ucode_files[@]}" > "$ucode_stage/kernel/x86/microcode/GenuineIntel.bin"
+        fi
+        ( cd "$ucode_stage" && find . -print0 |
+            cpio --null -o --format=newc --owner 0:0 --quiet ) > "$OUT/microcode.cpio"
+        cat -- "$OUT/microcode.cpio" "$ARCHIVE" > "$ARCHIVE.microcode"
+        mv -- "$ARCHIVE.microcode" "$ARCHIVE"
+        rm -f -- "$OUT/microcode.cpio"
+        rm -rf -- "$ucode_stage"
+        trap - EXIT
+        log "Early microcode prepended"
+    else
+        log "No microcode files found in $FIRMWARE_DIR; skipping early microcode"
+    fi
+fi
 
 log "Done"
 printf 'Initramfs: %s (%s)\n' "$ARCHIVE" "$(du -h "$ARCHIVE" | cut -f1)"

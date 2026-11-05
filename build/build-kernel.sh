@@ -2,8 +2,11 @@
 # ==============================================================================
 # bubbleOS - kernel acquisition (Phase 1.3, step 3)
 # ==============================================================================
-# Downloads the Debian kernel binary and modules packages, then extracts them
-# into out/kernel/. No kernel compilation is performed.
+# Imports the locally built bubbleOS kernel (boot/vmlinuz-bubbleos and the
+# sibling bubble-modules/ tree) into out/kernel/.
+#
+# A Debian package download remains available as a bootstrap fallback:
+#   KERNEL_SOURCE=debian ./build/build-kernel.sh
 # ==============================================================================
 set -Eeuo pipefail
 export PATH="/usr/sbin:/sbin:${PATH}"
@@ -16,6 +19,19 @@ EXTRACT="$OUT/root"
 
 log() { printf '[bubbleOS] %s\n' "$*"; }
 die() { printf '[bubbleOS] ERROR: %s\n' "$*" >&2; exit 1; }
+
+KERNEL_SOURCE="${KERNEL_SOURCE:-auto}"
+LOCAL_KERNEL_IMAGE="${LOCAL_KERNEL_IMAGE:-$ROOT/boot/vmlinuz-bubbleos}"
+LOCAL_MODULE_ROOT="${LOCAL_MODULE_ROOT:-$ROOT/../bubble-modules}"
+
+if [[ "$KERNEL_SOURCE" != "debian" ]]; then
+    if [[ -f "$LOCAL_KERNEL_IMAGE" && -d "$LOCAL_MODULE_ROOT" ]]; then
+        log "Local bubbleOS kernel detected; importing it"
+        OUT="$OUT" KERNEL_IMAGE="$LOCAL_KERNEL_IMAGE" MODULE_ROOT="$LOCAL_MODULE_ROOT" \
+            exec "$ROOT/build/import-kernel.sh"
+    fi
+    log "No local bubbleOS kernel found; falling back to the Debian bootstrap kernel"
+fi
 
 command -v apt-get >/dev/null 2>&1 || die "Missing required command: apt-get"
 command -v dpkg-deb >/dev/null 2>&1 || die "Missing required command: dpkg-deb"
