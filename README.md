@@ -184,3 +184,13 @@ The QEMU integration suite boots the image and drives the serial console:
 
 It requires `python3-pexpect`, QEMU/OVMF and passwordless `sudo`. Each suite
 works on a temporary copy of `out/bubbleos.img`; see `tests/qemu/README.md`.
+
+---
+
+## 🛠️ Related Projects
+
+* [**Universal Ruvomain ADB App Manager [URAAM]**](https://github.com/Ruraam/Uraam) <img src="https://raw.githubusercontent.com/Ruraam/Uraam/8661b39541a259689e88eedc71ad98837ce4b3c4/assets/uraam_logo.svg" width="30"/> [![Stars](https://img.shields.io/github/stars/Ruraam/Uraam?style=flat-square&logo=github&color=yellow)](https://github.com/Ruraam/Uraam/stargazers) — An all-in-one shell toolkit for `Android debloating`. Uninstall/disable your apps, backup your debloat apps JSON file& revert/restore, install apk. Works with `Termux WirelessADB, Shizuku, Root`, `LinuxDebian, Arch, Fedora, macOS & WSL`. Compatible with Canta/UAD JSON lists.
+
+* [**Debup**](https://github.com/Ruraam/debup) <img src="https://raw.githubusercontent.com/Ruraam/debup/6c95ca64c20dff710e76a4cd3e85943b1ed4c8b2/assets/debup-icon.svg" width="30"/> [![Stars](https://img.shields.io/github/stars/Ruraam/debup?style=flat-square&logo=github&color=yellow)](https://github.com/Ruraam/debup/stargazers) - Search, discover, track, install, and upgrade .deb packages directly from APT & GitHub Releases simultaneously
+
+*  [**Universal Linux Package Manager [ULPM]**](https://github.com/Ruraam/ulpm) <img src="https://raw.githubusercontent.com/Ruraam/ulpm/703cc478f9f814ef7b4ec0830230b2e7830d6460/assets/ulpm-logo4.svg" width="30"/> [![Stars](https://img.shields.io/github/stars/Ruraam/ulpm?style=flat-square&logo=github&color=yellow)](https://github.com/Ruraam/ulpm/stargazers) —Lightweight, rootless, zero-daemon, sandboxed `application/read-only OS runtime` for any Linux distribution. Lighter thanFlatpak or Snap.
