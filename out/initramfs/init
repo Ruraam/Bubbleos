@@ -1,0 +1,240 @@
+#!/bin/sh
+# ==============================================================================
+# bubbleOS - initramfs init
+# ==============================================================================
+# Mounts the pseudo-filesystems, loads the storage drivers, resolves the
+# bubbleOS generation selected by @rootfs/current, and switches to that Btrfs
+# subvolume. Without a usable root filesystem it falls back to a BusyBox shell.
+# ==============================================================================
+
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export HOME=/root
+
+mkdir -p /proc /sys /dev /tmp /run /root /newroot /mnt
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+
+if ! mount -t devtmpfs devtmpfs /dev 2>/dev/null; then
+    mount -t tmpfs tmpfs /dev
+    mdev -s
+fi
+
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts 2>/dev/null || true
+mount -t tmpfs tmpfs /dev/shm 2>/dev/null || true
+mount -t tmpfs tmpfs /tmp 2>/dev/null || true
+mount -t tmpfs tmpfs /run 2>/dev/null || true
+
+# Storage drivers are modules in the bootstrap kernel: load them before probing.
+# Btrfs uses the crypto API for its crc32c checksums; ext4 is kept for rescue
+# boots of older images.
+modprobe crc32c-cryptoapi 2>/dev/null || true
+modprobe crc32c-intel 2>/dev/null || modprobe crc32c_generic 2>/dev/null || true
+modprobe btrfs 2>/dev/null || true
+modprobe ext4 2>/dev/null || true
+modprobe virtio_blk 2>/dev/null || true
+modprobe ata_piix 2>/dev/null || true
+modprobe ahci 2>/dev/null || true
+modprobe sd_mod 2>/dev/null || true
+
+# root= wins; otherwise probe the usual QEMU disk names.
+root_spec=""
+root_device=""
+root_flags=""
+for arg in $(cat /proc/cmdline); do
+    case "$arg" in
+        root=*) root_spec="${arg#root=}" ;;
+        rootflags=*) root_flags="${arg#rootflags=}" ;;
+    esac
+done
+
+case "$root_spec" in
+    "")
+        ;;
+    UUID=*|LABEL=*)
+        printf 'bubbleOS: resolving root %s\n' "$root_spec"
+        retries=0
+        while [ -z "$root_device" ] && [ "$retries" -lt 50 ]; do
+            root_device="$(findfs "$root_spec" 2>/dev/null || true)"
+            if [ -z "$root_device" ]; then
+                sleep 0.2
+            fi
+            retries=$((retries + 1))
+        done
+        ;;
+    PARTUUID=*)
+        printf 'bubbleOS: PARTUUID roots are not supported; use UUID= or LABEL=\n' >&2
+        ;;
+    *)
+        root_device="$root_spec"
+        ;;
+esac
+
+# Only probe devices when no root= parameter was supplied.
+if [ -z "$root_spec" ]; then
+    for candidate in /dev/vda /dev/sda /dev/vda1 /dev/sda1; do
+        if [ -b "$candidate" ]; then
+            root_device="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -n "$root_device" ]; then
+    printf 'bubbleOS: waiting for root device %s\n' "$root_device"
+    retries=0
+    while [ ! -b "$root_device" ] && [ "$retries" -lt 30 ]; do
+        sleep 0.2
+        retries=$((retries + 1))
+    done
+fi
+
+# Optional recovery/selection override:
+#   rootflags=subvol=@rootfs/generations/000002
+requested_subvol=""
+for opt in $(printf '%s\n' "$root_flags" | tr ',' ' '); do
+    case "$opt" in
+        subvol=*) requested_subvol="${opt#subvol=}" ;;
+    esac
+done
+
+resolve_generation_link() {
+    link_target="${1:-}"
+    link_target="${link_target#./}"
+    case "$link_target" in
+        "") return 0 ;;
+        /*)
+            printf 'bubbleOS: ignoring absolute generation link %s\n' "$link_target" >&2
+            return 0
+            ;;
+    esac
+    case "/$link_target/" in
+        */../*)
+            printf 'bubbleOS: ignoring generation link escaping @rootfs: %s\n' "$link_target" >&2
+            return 0
+            ;;
+    esac
+    if [ -d "/mnt/@rootfs/$link_target" ]; then
+        printf '@rootfs/%s\n' "$link_target"
+    fi
+}
+
+current_subvol=""
+previous_subvol=""
+newest_subvol=""
+
+if [ -n "$root_device" ] && [ -b "$root_device" ]; then
+    printf 'bubbleOS: reading generation links from %s\n' "$root_device"
+    if mount -t btrfs -o ro,subvolid=5 "$root_device" /mnt; then
+        current_subvol="$(resolve_generation_link "$(readlink /mnt/@rootfs/current 2>/dev/null || true)")"
+        previous_subvol="$(resolve_generation_link "$(readlink /mnt/@rootfs/previous 2>/dev/null || true)")"
+        newest=""
+        for entry in /mnt/@rootfs/generations/*; do
+            [ -d "$entry" ] || continue
+            name="${entry##*/}"
+            case "$name" in
+                [0-9][0-9][0-9][0-9][0-9][0-9]) newest="$name" ;;
+            esac
+        done
+        if [ -n "$newest" ]; then
+            newest_subvol="@rootfs/generations/$newest"
+        fi
+        umount /mnt 2>/dev/null || true
+    else
+        printf 'bubbleOS: failed to read the Btrfs top-level on %s\n' "$root_device" >&2
+    fi
+fi
+
+# Boot order: explicit rootflags, then @rootfs/current, then @rootfs/previous,
+# then the newest generation. The first subvolume that mounts wins, so a
+# deleted or corrupted selection never traps the machine in the initramfs.
+candidates=""
+add_candidate() {
+    [ -n "$1" ] || return 0
+    case "$candidates" in
+        *" $1 "*) return 0 ;;
+    esac
+    candidates="$candidates $1 "
+}
+
+add_candidate "$requested_subvol"
+add_candidate "$current_subvol"
+add_candidate "$previous_subvol"
+add_candidate "$newest_subvol"
+
+root_subvol=""
+if [ -n "$root_device" ] && [ -b "$root_device" ]; then
+    for candidate in $candidates; do
+        case "/$candidate/" in
+            */../*)
+                printf 'bubbleOS: invalid root subvolume path: %s\n' "$candidate" >&2
+                continue
+                ;;
+        esac
+        if [ "$candidate" = "$requested_subvol" ]; then
+            printf 'bubbleOS: trying requested subvolume %s\n' "$candidate"
+        else
+            printf 'bubbleOS: trying fallback subvolume %s\n' "$candidate"
+        fi
+        if mount -t btrfs \
+            -o "rw,subvol=$candidate,compress=zstd:1,noatime" \
+            "$root_device" /newroot 2>/dev/null; then
+            root_subvol="$candidate"
+            break
+        fi
+        printf 'bubbleOS: cannot mount %s\n' "$candidate" >&2
+    done
+fi
+
+if [ -n "$root_subvol" ]; then
+    if [ -n "$requested_subvol" ] && [ "$root_subvol" != "$requested_subvol" ]; then
+        printf 'bubbleOS: generation fallback: %s (requested %s)\n' \
+            "$root_subvol" "$requested_subvol"
+    fi
+    printf 'bubbleOS: mounting subvolume %s on /newroot\n' "$root_subvol"
+    mkdir -p /newroot/proc /newroot/sys /newroot/dev
+    mount --move /proc /newroot/proc
+    mount --move /sys /newroot/sys
+    mount --move /dev /newroot/dev
+    printf 'bubbleOS: switching root\n\n'
+    exec switch_root /newroot /sbin/init
+fi
+
+# Keep the Btrfs top-level available so @rootfs/current or a generation can be
+# repaired from the rescue shell without a btrfs binary.
+if [ -n "$root_device" ] && [ -b "$root_device" ]; then
+    if mount -t btrfs -o rw,subvolid=5 "$root_device" /mnt 2>/dev/null; then
+        printf 'bubbleOS: Btrfs top-level mounted on /mnt for recovery.\n' >&2
+        printf 'bubbleOS: repair @rootfs/current, then reboot.\n' >&2
+    fi
+fi
+
+if [ -n "$root_device" ] && [ ! -b "$root_device" ]; then
+    printf 'bubbleOS: root device %s is not available\n' "$root_device" >&2
+elif [ -z "$root_device" ] && [ -n "$root_spec" ]; then
+    printf 'bubbleOS: root device %s not found\n' "$root_spec" >&2
+fi
+
+cat <<'BANNER'
+
+██████╗ ██╗   ██╗██████╗ ██████╗ ██╗     ███████╗ ██████╗ ███████╗
+██╔══██╗██║   ██║██╔══██╗██╔══██╗██║     ██╔════╝██╔═══██╗██╔════╝
+██████╔╝██║   ██║██████╔╝██████╔╝██║     █████╗  ██║   ██║███████╗
+██╔══██╗██║   ██║██╔══██╗██╔══██╗██║     ██╔══╝  ██║   ██║╚════██║
+██████╔╝╚██████╔╝██████╔╝██████╔╝███████╗███████╗╚██████╔╝███████║
+╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚══════╝ ╚═════╝ ╚══════╝
+           B U B B L E  O P E R A T I N G   S Y S T E M           
+
+ bubbleOS initramfs - development
+
+BANNER
+
+printf 'Kernel: %s\n' "$(uname -r)"
+printf 'No bootable generation found, dropping to an initramfs shell.\n'
+printf 'Welcome to bubbleOS!\n\n'
+
+hostname bubbleos 2>/dev/null || true
+export PS1='[root@bubbleos /]# '
+
+exec /bin/sh
