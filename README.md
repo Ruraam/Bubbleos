@@ -9,6 +9,8 @@
 
 </div>
 
+---
+
 ## Project principles
 
 - Linux kernel
