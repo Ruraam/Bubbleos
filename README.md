@@ -3,8 +3,8 @@ BubbleOS is an experimental Linux operating system built around the Linux kernel
 ## Project principles
 
 - Linux kernel
-- ULPM as the package engine
-- LPK as the native package format
+- [ULPM](https://github.com/Ruraam/ulpm) as the package engine
+- [LPK](https://github.com/Ruraam/ulpm/blob/main/docs/lpk-format.md) as the native package format
 - System generations and rollback
 - Immutable system composition where practical
 - Rootless/sandboxed applications where supported by ULPM
