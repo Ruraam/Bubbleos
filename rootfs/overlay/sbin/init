@@ -26,11 +26,13 @@ mountpoint -q /tmp || mount -t tmpfs tmpfs /tmp 2>/dev/null || true
 hostname bubbleos 2>/dev/null || true
 
 printf '\n'
-printf '  ____        _     _        ____  _____\n'
-printf ' | __ ) _   _| |__ | | ___  / ___||  ___|\n'
-printf " |  _ \\| | | | '_ \\| |/ _ \\ \\___ \\| |___\n"
-printf ' | |_) | |_| | |_) | |  __/  ___) |___ |\n'
-printf ' |____/ \\__,_|_.__/|_|\\___| |____/_____|\n'
+printf ' ██████╗ ██╗   ██╗██████╗ ██████╗ ██╗     ███████╗ ██████╗ ███████╗\n'
+printf ' ██╔══██╗██║   ██║██╔══██╗██╔══██╗██║     ██╔════╝██╔═══██╗██╔════╝\n'
+printf " ██████╔╝██║   ██║██████╔╝██████╔╝██║     █████╗  ██║   ██║███████╗\n"
+printf ' ██╔══██╗██║   ██║██╔══██╗██╔══██╗██║     ██╔══╝  ██║   ██║╚════██║\n'
+printf ' ██████╔╝╚██████╔╝██████╔╝██████╔╝███████╗███████╗╚██████╔╝███████║\n'
+printf ' ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚══════╝ ╚═════╝ ╚══════╝\n'
+printf '            B U B B L E  O P E R A T I N G   S Y S T E M           \n'
 printf '\n'
 printf 'Welcome to bubbleOS (development RootFS)\n\n'
 printf 'Kernel: %s\n' "$(uname -r)"
