@@ -22,7 +22,7 @@
 | Feature | <img src="https://raw.githubusercontent.com/Ruraam/Bubbleos/d2a02960999a4aba0fc5e4a09634c864ad145bcd/assets/bubbleos-animated.svg" width="43" /> **BubbleOS** | <img src="https://upload.wikimedia.org/wikipedia/commons/1/13/Arch_Linux_%22Crystal%22_icon.svg" width="30" /> **Arch Linux** | <img src="https://camo.githubusercontent.com/4d0f616767bd4f25aa0da8f52498ffc690562c8166ea48811387c24a519802c0/68747470733a2f2f692e696d6775722e636f6d2f367146436c41312e706e67" width="30" /> **NixOS** |
 | :--- | :---:| :---: | :---: |
 | **System Philosophy** | 🔒 Immutable & Atomic | 🛠️ DIY & Rolling | 📜 Declarative & Pure |
-| **Root Immutability** | ✅ **Read-OnlyRoot** | ❌ Mutable (Writable) | ✅ Read-Only Store |
+| **Root Immutability** | ✅ **Read-Only Root** | ❌ Mutable (Writable) | ✅ Read-Only Store |
 | **Instant Rollbacks** | ⚡ **Native (Btrfs subvolumes)** | ⚠️ Manual (Snapper hooks) | ⚡ Native (Generations) |
 | **Standard Linux FHS** | 🐧 **100% Native POSIX** | 🐧 100% Native POSIX | ❌ Broken (`patchelf` needed) |
 | **Native Sandboxing** | 🛡️ **Bubblewrap Core (ULPM)** | ❌ None (Unconfined) | ⚠️ Build-time only |
