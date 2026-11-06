@@ -1,5 +1,5 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/Ruraam/Bubbleos/237f5bd4cb2917ef35ce8ef763eedc8ff655711f/assets/bubbleos-logo.svg" width="460" />
+<img src="https://raw.githubusercontent.com/Ruraam/Bubbleos/d2a02960999a4aba0fc5e4a09634c864ad145bcd/assets/bubbleos-animated.svg" width="460" />
 <h1>BubbleOS is an experimental immutable, atomic Linux operating system built around the Linux kernel and the ULPM/LPK ecosystem.</h1>
 </div>
 
