@@ -1,6 +1,6 @@
 <div align="center">
 <img src="https://raw.githubusercontent.com/Ruraam/Bubbleos/237f5bd4cb2917ef35ce8ef763eedc8ff655711f/assets/bubbleos-logo.svg" width="460" />
-<h1>BubbleOS is an experimental Linux operating system built around the Linux kernel and the ULPM/LPK ecosystem.</h1>
+<h1>BubbleOS is an experimental immutable, atomic Linux operating system built around the Linux kernel and the ULPM/LPK ecosystem.</h1>
 </div>
 
 ## Project principles
