@@ -21,12 +21,12 @@
 
 | Feature | 🫧 **BubbleOS** |🏹 **Arch Linux** | ❄️ **NixOS** |
 | :--- | :---:| :---: | :---: |
-| **System Philosophy** | 🔒 Immutable & Atomic | 🛠️ DIY& Rolling | 📜 Declarative & Pure |
+| **System Philosophy** | 🔒 Immutable & Atomic | 🛠️ DIY & Rolling | 📜 Declarative & Pure |
 | **Root Immutability** | ✅ **Read-OnlyRoot** | ❌ Mutable (Writable) | ✅ Read-Only Store |
-| **Instant Rollbacks** |⚡ **Native (Btrfs subvolumes)** | ⚠️ Manual (Snapper hooks) | ⚡ Native (Generations) |
-| **Standard Linux FHS** | 🐧 **100% Native POSIX** | 🐧 100% Native POSIX |❌ Broken (`patchelf` needed) |
-| **Native Sandboxing** | 🛡️ **BubblewrapCore (ULPM)** | ❌ None (Unconfined) | ⚠️ Build-time only |
-| **MemoryFootprint** | 🪶 **~300 MB idle** | 🪶 Minimal (~300–500 MB) | ⚖️ Moderate (~800 MB+) |
+| **Instant Rollbacks** | ⚡ **Native (Btrfs subvolumes)** | ⚠️ Manual (Snapper hooks) | ⚡ Native (Generations) |
+| **Standard Linux FHS** | 🐧 **100% Native POSIX** | 🐧 100% Native POSIX | ❌ Broken (`patchelf` needed) |
+| **Native Sandboxing** | 🛡️ **Bubblewrap Core (ULPM)** | ❌ None (Unconfined) | ⚠️ Build-time only |
+| **Memory Footprint** | 🪶 **~300 MB idle** | 🪶 Minimal (~300–500 MB) | ⚖️ Moderate (~800 MB+) |
 | **Package Management** | 📦 **ULPM (LPK / SquashFS)** | 📦 `pacman` + AUR | ❄️ Nix Store + Flakes |
 | **Learning Curve** | 🟢 **Gentle (Standard Unix/Shell)** | 🟡Moderate | 🔴 Steep (Nix DSL & Flakes) |
 | **Breakage Risk** | 🛡️ **Near-Zero (Rollback in 3s)** | ⚠️ High (Friday night updates) | 🛡️ Near-Zero |
