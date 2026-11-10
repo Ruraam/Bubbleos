@@ -4,10 +4,9 @@
 </div>
 
 <div align="center">
-<img src="https://raw.githubusercontent.com/Ruraam/Bubbleos/refs/heads/main/assets/bubbleos-fuzzle_1.png" />
+<img src="assets/bubbleos-fuzzle_1.png" alt="Bubble Desktop Preview" width="100%" />
+<p>🚀<strong>Bubble Desktop is alive!</strong> Coming soon with major optimizations, fixes, and native LPK integration.</p>
 </div>
-
-*Bubble Desktop comming soon with lot of fixes and tweaks.*
 
 ## Project principles
 
