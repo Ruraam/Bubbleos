@@ -3,6 +3,12 @@
 <h1>BubbleOS is an experimental immutable, atomic Linux operating system built around the Linux kernel and the ULPM/LPK ecosystem.</h1>
 </div>
 
+<div align="center">
+<img src="https://raw.githubusercontent.com/Ruraam/Bubbleos/refs/heads/main/assets/bubbleos-fuzzle_1.png" />
+</div>
+
+*Bubble Desktop comming soon with lot of fixes and tweaks.*
+
 ## Project principles
 
 - Linux kernel
