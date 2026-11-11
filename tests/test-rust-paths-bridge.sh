@@ -46,6 +46,7 @@ case "${1:-}" in
     version-compare) printf '0\n' ;;
     version-matches) printf 'true\n' ;;
     generation-create) printf '000124\n' ;;
+    generation-switch-links) : ;;
 esac
 STUB
 chmod 0755 "$BUBBLEOS_RUST_PATHS_BIN"
@@ -141,6 +142,9 @@ assert_rust_call generation-list bubble_generation_list
 assert_rust_call generation-next bubble_generation_next
 bubble_generation_create --from 000123 --description bridge-test >/dev/null
 [[ "$(cat "$BUBBLEOS_STUB_ARGS_FILE")" == "$(printf '%s\n' generation-create 000123 bridge-test)" ]]
+[[ "$(cat "$BUBBLEOS_STUB_CONFIG_FILE")" == "$EXPECTED_CONFIG" ]]
+BUBBLEOS_SKIP_SNAPSHOTS=1 bubble_generation_activate 000123 >/dev/null
+[[ "$(cat "$BUBBLEOS_STUB_ARGS_FILE")" == "$(printf '%s\n' generation-switch-links 000123 '')" ]]
 [[ "$(cat "$BUBBLEOS_STUB_CONFIG_FILE")" == "$EXPECTED_CONFIG" ]]
 assert_rust_call generation-exists bubble_generation_exists 000123
 assert_rust_call snapshot-valid-name bubble_snapshot_valid_name restore.001
