@@ -283,11 +283,7 @@ fn write_generation_metadata(
 
 impl BubblePaths {
     /// Write generation metadata using a synced temporary file and atomic rename.
-    pub fn generation_write_metadata(
-        &self,
-        generation: &str,
-        description: &str,
-    ) -> io::Result<()> {
+    pub fn generation_write_metadata(&self, generation: &str, description: &str) -> io::Result<()> {
         write_generation_metadata(self, generation, description)
     }
 
