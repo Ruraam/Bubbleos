@@ -184,8 +184,11 @@ impl BubblePaths {
             self.state_dir.clone(),
             self.rootfs_mount.clone(),
             self.state_dir.join("transactions"),
-            self.store_dir.clone(),
-            self.ulpm_config_dir.clone(),
+            // Match bubble_init_paths exactly: these two directories are
+            // rooted directly under STATE_DIR, even when their derived
+            // configuration paths have explicit overrides.
+            self.state_dir.join("store"),
+            self.state_dir.join("ulpm"),
             self.state_dir.join("wal"),
             self.config_dir.clone(),
             self.cache_dir.clone(),
@@ -225,6 +228,156 @@ impl BubblePaths {
     /// security boundary for privileged filesystem operations.
     pub fn is_lexically_below(path: &Path, root: &Path) -> bool {
         path.strip_prefix(root).is_ok()
+    }
+}
+
+/// Errors returned by privileged BubbleOS layout preflight checks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BubbleSystemError {
+    RootRequired,
+    MissingBtrfs,
+    RootfsNotMounted(PathBuf),
+    GenerationDirectoryMissing(PathBuf),
+    SnapshotsNotMounted(PathBuf),
+}
+
+impl std::fmt::Display for BubbleSystemError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RootRequired => {
+                write!(formatter, "bubble: this operation requires root privileges")
+            }
+            Self::MissingBtrfs => write!(
+                formatter,
+                "bubble: the btrfs command is unavailable (install btrfs-progs)"
+            ),
+            Self::RootfsNotMounted(path) => write!(
+                formatter,
+                "bubble: {} is not mounted (is the @rootfs subvolume available?)",
+                path.display()
+            ),
+            Self::GenerationDirectoryMissing(path) => write!(
+                formatter,
+                "bubble: generation directory is missing: {}",
+                path.display()
+            ),
+            Self::SnapshotsNotMounted(path) => write!(
+                formatter,
+                "bubble: {} is not mounted (is the @snapshots subvolume available?)",
+                path.display()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for BubbleSystemError {}
+
+#[cfg(target_os = "linux")]
+extern "C" {
+    fn geteuid() -> u32;
+}
+
+/// Check the effective UID using the operating system, not environment data.
+pub fn require_root() -> Result<(), BubbleSystemError> {
+    #[cfg(target_os = "linux")]
+    let is_root = unsafe { geteuid() == 0 };
+
+    #[cfg(not(target_os = "linux"))]
+    let is_root = false;
+
+    if is_root {
+        Ok(())
+    } else {
+        Err(BubbleSystemError::RootRequired)
+    }
+}
+
+fn executable_in_path(program: &str) -> bool {
+    let Some(path_value) = std::env::var_os("PATH") else {
+        return false;
+    };
+
+    std::env::split_paths(&path_value).any(|directory| {
+        let candidate = directory.join(program);
+        if !candidate.is_file() {
+            return false;
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            candidate
+                .metadata()
+                .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+        }
+
+        #[cfg(not(unix))]
+        {
+            true
+        }
+    })
+}
+
+fn is_mountpoint(path: &Path) -> bool {
+    std::process::Command::new("mountpoint")
+        .arg("-q")
+        .arg("--")
+        .arg(path)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+impl BubblePaths {
+    fn validate_generation_layout_with<C, M>(
+        &self,
+        mut command_available: C,
+        mut mountpoint_check: M,
+    ) -> Result<(), BubbleSystemError>
+    where
+        C: FnMut(&str) -> bool,
+        M: FnMut(&Path) -> bool,
+    {
+        if !command_available("btrfs") {
+            return Err(BubbleSystemError::MissingBtrfs);
+        }
+        if !mountpoint_check(&self.rootfs_mount) {
+            return Err(BubbleSystemError::RootfsNotMounted(
+                self.rootfs_mount.clone(),
+            ));
+        }
+        if !self.generations_dir.is_dir() {
+            return Err(BubbleSystemError::GenerationDirectoryMissing(
+                self.generations_dir.clone(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Preserve the checks performed by the legacy bubble_require_generation_layout.
+    pub fn require_generation_layout(&self) -> Result<(), BubbleSystemError> {
+        self.validate_generation_layout_with(executable_in_path, is_mountpoint)
+    }
+
+    fn validate_snapshots_layout_with<M>(
+        &self,
+        mut mountpoint_check: M,
+    ) -> Result<(), BubbleSystemError>
+    where
+        M: FnMut(&Path) -> bool,
+    {
+        if !mountpoint_check(&self.snapshots_dir) {
+            return Err(BubbleSystemError::SnapshotsNotMounted(
+                self.snapshots_dir.clone(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Preserve the mountpoint check performed by the legacy snapshots guard.
+    pub fn require_snapshots_layout(&self) -> Result<(), BubbleSystemError> {
+        self.validate_snapshots_layout_with(is_mountpoint)
     }
 }
 
