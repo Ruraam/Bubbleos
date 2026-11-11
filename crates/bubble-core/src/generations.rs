@@ -142,7 +142,7 @@ mod tests {
         assert_eq!(paths.generation_next().unwrap(), "000001");
         assert!(!paths.generation_exists("000001"));
 
-        std::fs::create_dir_all(root).unwrap();
+        std::fs::create_dir_all(&root).unwrap();
         std::fs::remove_dir_all(root).unwrap();
     }
 
