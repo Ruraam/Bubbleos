@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 pub mod bootloader;
 pub mod generations;
 pub mod snapshots;
+pub mod repo;
 pub mod system;
 
 /// Centralized BubbleOS filesystem layout.
