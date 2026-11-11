@@ -42,9 +42,9 @@ printf '%s\n' \
     "$BUBBLEOS_ESP_GENERATIONS_DIR" > "$BUBBLEOS_STUB_CONFIG_FILE"
 
 case "${1:-}" in
-    arch) printf 'amd64\\n' ;;
-    version-compare) printf '0\\n' ;;
-    version-matches) printf 'true\\n' ;;
+    arch) printf 'amd64\n' ;;
+    version-compare) printf '0\n' ;;
+    version-matches) printf 'true\n' ;;
 esac
 STUB
 chmod 0755 "$BUBBLEOS_RUST_PATHS_BIN"
