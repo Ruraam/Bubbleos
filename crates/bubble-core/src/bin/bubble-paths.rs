@@ -183,20 +183,36 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     }
 
     if command == "snapshot-create-generation" {
-        let values = arguments.iter().map(|value| value.to_str())
-            .collect::<Option<Vec<_>>>().ok_or_else(|| std::io::Error::new(
-                std::io::ErrorKind::InvalidInput, "snapshot arguments must be valid UTF-8"
-            ))?;
+        let values = arguments
+            .iter()
+            .map(|value| value.to_str())
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "snapshot arguments must be valid UTF-8",
+                )
+            })?;
         require_root()?;
         paths.require_snapshots_layout()?;
-        println!("{}", paths.snapshot_create_generation(values[0], values[1])?.display());
+        println!(
+            "{}",
+            paths
+                .snapshot_create_generation(values[0], values[1])?
+                .display()
+        );
         return Ok(());
     }
 
     if command == "snapshot-create-var" {
-        let label = argument.and_then(OsStr::to_str).ok_or_else(|| std::io::Error::new(
-            std::io::ErrorKind::InvalidInput, "snapshot-create-var requires a label"
-        ))?;
+        let label = argument
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "snapshot-create-var requires a label",
+                )
+            })?;
         require_root()?;
         paths.require_snapshots_layout()?;
         println!("{}", paths.snapshot_create_var(label)?.display());
@@ -204,9 +220,14 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     }
 
     if command == "snapshot-schedule-restore" {
-        let name = argument.and_then(OsStr::to_str).ok_or_else(|| std::io::Error::new(
-            std::io::ErrorKind::InvalidInput, "snapshot-schedule-restore requires a snapshot name"
-        ))?;
+        let name = argument
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "snapshot-schedule-restore requires a snapshot name",
+                )
+            })?;
         require_root()?;
         paths.require_snapshots_layout()?;
         println!("{}", paths.snapshot_schedule_restore(name)?);
