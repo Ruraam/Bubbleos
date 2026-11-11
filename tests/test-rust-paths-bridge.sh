@@ -45,6 +45,7 @@ case "${1:-}" in
     arch) printf 'amd64\n' ;;
     version-compare) printf '0\n' ;;
     version-matches) printf 'true\n' ;;
+    store-object-dir|store-object-manifest|store-latest-version|store-info-id|store-info-file) : ;;
     generation-create) printf '000124\n' ;;
     generation-switch-links) : ;;
     generation-write-metadata) : ;;
@@ -98,6 +99,8 @@ source "$ROOT/bubble/lib/repo.sh"
 source "$ROOT/bubble/lib/generation.sh"
 # shellcheck disable=SC1091
 source "$ROOT/bubble/lib/bootloader.sh"
+# shellcheck disable=SC1091
+source "$ROOT/bubble/lib/store.sh"
 
 EXPECTED_CONFIG="$(printf '%s\n' \
     "$BUBBLEOS_NAME" "$BUBBLEOS_VERSION" "$BUBBLEOS_CHANNEL" \
@@ -157,5 +160,10 @@ assert_rust_call snapshot-list bubble_snapshot_list
 assert_rust_call bootloader-root-uuid bubble_bootloader_root_uuid
 assert_rust_call bootloader-render bubble_bootloader_render_config \
     "$TMP_DIR/generations" uuid-test 000010 000009
+assert_rust_call store-object-dir bubble_store_object_dir "$(printf 'a%.0s' {1..64})"
+assert_rust_call store-object-manifest bubble_store_object_manifest "$(printf 'a%.0s' {1..64})"
+assert_rust_call store-latest-version bubble_store_latest_version bubble-base
+assert_rust_call store-info-id bubble_store_info_for_id bubble-base=1.2
+assert_rust_call store-info-file bubble_store_info_for_file "$TMP_DIR/package.lpk"
 
 printf 'Rust path bridge: OK\n'
