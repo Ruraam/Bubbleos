@@ -517,13 +517,17 @@ bubble_generation_activate() {
         bubble_snapshot_var "before-${gen}" >/dev/null || return 1
     fi
 
-    if [[ -n "$current" ]]; then
-        ln -sfn "generations/$current" "$BUBBLEOS_PREVIOUS_LINK"
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-switch-links "$gen" "$current" || return 1
     else
-        rm -f "$BUBBLEOS_PREVIOUS_LINK"
+        if [[ -n "$current" ]]; then
+            ln -sfn "generations/$current" "$BUBBLEOS_PREVIOUS_LINK" || return 1
+        else
+            rm -f -- "$BUBBLEOS_PREVIOUS_LINK" || return 1
+        fi
+        ln -sfn "generations/$gen" "$BUBBLEOS_CURRENT_LINK" || return 1
+        sync || return 1
     fi
-    ln -sfn "generations/$gen" "$BUBBLEOS_CURRENT_LINK"
-    sync
 
     if [[ "${BUBBLEOS_SKIP_SNAPSHOTS:-0}" != "1" ]]; then
         bubble_snapshot_prune --keep "${BUBBLEOS_SNAPSHOT_KEEP:-10}" >/dev/null 2>&1 ||
