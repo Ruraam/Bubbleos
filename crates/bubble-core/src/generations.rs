@@ -125,7 +125,7 @@ fn ensure_real_directory_or_missing(path: &Path) -> io::Result<()> {
             ),
         )),
         Ok(metadata) if !metadata.is_dir() => Err(io::Error::new(
-            io::ErrorKind::NotADirectory,
+            io::ErrorKind::InvalidInput,
             format!(
                 "generation metadata parent is not a directory: {}",
                 path.display()
