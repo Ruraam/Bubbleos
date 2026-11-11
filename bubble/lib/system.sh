@@ -118,6 +118,10 @@ BOOT
 }
 
 bubble_system_status() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths status
+        return $?
+    fi
     local current="none" previous="none" boot="not booted" init root_fstype root_subvol snapshots
     current="$(bubble_generation_current 2>/dev/null || printf 'none')"
     previous="$(bubble_generation_previous 2>/dev/null || printf 'none')"
