@@ -53,6 +53,11 @@ bubble_generation_write_metadata() {
     description="${description//$'\n'/ }"
     dir="$(bubble_generation_path "$gen")"
     file="$dir/etc/bubbleos/generation"
+    [[ ! -L "$dir/etc" && ! -L "$dir/etc/bubbleos" ]] || {
+        printf 'bubble: refusing to write metadata through a symlink in %s\n' \
+            "$dir" >&2
+        return 1
+    }
     install -d -m 0755 "$(dirname -- "$file")"
     cat > "$file" <<METADATA
 GENERATION=$gen
@@ -504,4 +509,725 @@ bubble_snapshot_list() {
     [[ -d "$BUBBLEOS_SNAPSHOTS_DIR" ]] || return 1
     find "$BUBBLEOS_SNAPSHOTS_DIR" -mindepth 2 -maxdepth 2 -type d -printf '%P\n' 2>/dev/null |
         sort
+}
+
+# ------------------------------------------------------------------------------
+# Store-backed generation composition
+# ------------------------------------------------------------------------------
+
+bubble_generation_lock_path() {
+    printf '%s/etc/bubbleos/packages.json\n' "$(bubble_generation_path "$1")"
+}
+
+bubble_generation_lock_json() {
+    local gen="${1:-}" file
+    [[ -n "$gen" ]] || return 1
+    bubble_generation_exists "$gen" || return 1
+    file="$(bubble_generation_lock_path "$gen")"
+    if [[ -f "$file" ]]; then
+        jq -e 'type == "object" and ((.packages // []) | type == "array")' \
+            "$file" >/dev/null 2>&1 || {
+            printf 'bubble: invalid package lock in generation %s: %s\n' \
+                "$gen" "$file" >&2
+            return 1
+        }
+        jq -S '.' "$file"
+    else
+        jq -n --arg base "$gen" \
+            '{format: 1, base_generation: $base, packages: []}'
+    fi
+}
+
+bubble_generation_base() {
+    local gen="${1:-}" lock
+    lock="$(bubble_generation_lock_json "$gen")" || return 1
+    jq -r --arg gen "$gen" '.base_generation // $gen' <<< "$lock"
+}
+
+bubble_generation_package_lines() {
+    local gen="${1:-}" lock
+    lock="$(bubble_generation_lock_json "$gen")" || return 1
+    jq -r '
+        .packages | sort_by(.id)[] |
+        [.id, .version, (.type // "system"), (.digest // "")] | @tsv
+    ' <<< "$lock"
+}
+
+bubble_package_lock_add() {
+    local lock="$1" id="$2" version="$3" digest="$4" type="$5" name="$6"
+    jq --arg id "$id" --arg version "$version" --arg digest "$digest" \
+        --arg type "$type" --arg name "$name" '
+        .format = (.format // 1) |
+        .packages = (
+            ((.packages // []) | map(select(.id != $id))) +
+            [{id: $id, version: $version, digest: $digest, type: $type, name: $name}]
+        ) |
+        .packages |= sort_by(.id)
+    ' <<< "$lock"
+}
+
+bubble_package_lock_remove() {
+    local lock="$1" id="$2"
+    jq --arg id "$id" '
+        .format = (.format // 1) |
+        .packages = ((.packages // []) | map(select(.id != $id)))
+    ' <<< "$lock"
+}
+
+bubble_package_lock_verify() {
+    local lock="$1"
+    local -a selectors=()
+    mapfile -t selectors < <(
+        jq -r '.packages[]? | "\(.id)=\(.version)"' <<< "$lock" |
+            LC_ALL=C sort
+    )
+    (( ${#selectors[@]} > 0 )) || return 0
+    bubble_store_ulpm verify "${selectors[@]}" >&2
+}
+
+# bubble_generation_compose_from <source-gen> <lock-json> <description> <activate>
+#
+# Builds a new generation from the source's base generation and overlays every
+# package pinned in the lock. The base generation is always package-free, so
+# upgrading or removing a package cannot leave stale files behind. Prints the
+# new generation number on stdout; progress goes to stderr.
+bubble_generation_compose_from() {
+    local source="${1:-}" lock="${2:-}" description="${3:-}" activate="${4:-0}"
+    local base base_lock base_packages gen dest object manifest id version digest type
+    local count lock_tmp
+
+    [[ -n "$source" && -n "$lock" ]] || return 1
+    bubble_generation_exists "$source" || {
+        printf 'bubble: generation %s does not exist\n' "$source" >&2
+        return 1
+    }
+    jq -e 'type == "object" and ((.packages // []) | type == "array")' \
+        <<< "$lock" >/dev/null 2>&1 || {
+        printf 'bubble: invalid package set\n' >&2
+        return 1
+    }
+
+    base="$(jq -r '.base_generation // empty' <<< "$lock")"
+    [[ -n "$base" ]] || base="$source"
+    bubble_generation_exists "$base" || {
+        printf 'bubble: base generation %s does not exist\n' "$base" >&2
+        return 1
+    }
+    base_lock="$(bubble_generation_lock_json "$base")" || return 1
+    base_packages="$(jq '.packages | length' <<< "$base_lock")"
+    if (( base_packages > 0 )); then
+        printf 'bubble: base generation %s already contains store packages\n' \
+            "$base" >&2
+        return 1
+    fi
+
+    gen="$(bubble_generation_next)"
+    dest="$(bubble_generation_path "$gen")"
+
+    printf 'bubble: composing generation %s from base %s\n' "$gen" "$base" >&2
+    if ! btrfs subvolume snapshot "$(bubble_generation_path "$base")" "$dest" \
+        >/dev/null; then
+        printf 'bubble: cannot snapshot base generation %s\n' "$base" >&2
+        return 1
+    fi
+
+    while IFS=$'\t' read -r id version digest type; do
+        [[ -n "$id" ]] || continue
+        case "$type" in
+            ""|rootfs|os|distro|system) ;;
+            *)
+                printf 'bubble: package %s is not a system package (type %s)\n' \
+                    "$id" "$type" >&2
+                btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+                return 1
+                ;;
+        esac
+        object="$(bubble_store_object_dir "$digest")" || {
+            printf 'bubble: invalid digest for package %s\n' "$id" >&2
+            btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+            return 1
+        }
+        manifest="$object/manifest.json"
+        [[ -f "$manifest" && -d "$object/payload" ]] || {
+            printf 'bubble: store object missing for %s %s (%s)\n' \
+                "$id" "$version" "$digest" >&2
+            btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+            return 1
+        }
+        if [[ "$(jq -r '.id // empty' "$manifest")" != "$id" ]] ||
+            [[ "$(jq -r '.version // empty' "$manifest")" != "$version" ]]; then
+            printf 'bubble: store object does not match %s %s\n' \
+                "$id" "$version" >&2
+            btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+            return 1
+        fi
+        printf 'bubble: applying %s %s\n' "$id" "$version" >&2
+        if ! cp -a --reflink=auto -- "$object/payload/." "$dest/"; then
+            printf 'bubble: cannot apply package %s %s\n' "$id" "$version" >&2
+            btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+            return 1
+        fi
+    done < <(
+        jq -r '
+            .packages | sort_by(.id)[] |
+            [.id, .version, (.digest // ""), (.type // "system")] | @tsv
+        ' <<< "$lock"
+    )
+
+    lock_tmp="$dest/etc/bubbleos/.packages.json.$$"
+    if [[ -L "$dest/etc" || -L "$dest/etc/bubbleos" ]]; then
+        printf 'bubble: refusing to write the package lock through a symlink\n' >&2
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    fi
+    install -d -m 0755 "$dest/etc/bubbleos" || {
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    }
+    if ! jq -S --arg base "$base" '
+        .format = (.format // 1) |
+        .base_generation = $base |
+        .packages = ((.packages // []) | sort_by(.id))
+    ' <<< "$lock" > "$lock_tmp"; then
+        rm -f -- "$lock_tmp"
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    fi
+    chmod 0644 "$lock_tmp" && chown root:root "$lock_tmp" &&
+        mv -f -- "$lock_tmp" "$dest/etc/bubbleos/packages.json" || {
+        rm -f -- "$lock_tmp"
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    }
+
+    count="$(jq '.packages | length' <<< "$lock")"
+    if [[ -z "$description" ]]; then
+        if (( count > 0 )); then
+            description="bubbleOS generation $gen ($count package(s))"
+        else
+            description="bubbleOS generation $gen"
+        fi
+    fi
+    bubble_generation_write_metadata "$gen" "$description" || {
+        printf 'bubble: cannot write metadata for generation %s\n' "$gen" >&2
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    }
+
+    if [[ ! -f "$dest/etc/os-release" ]] ||
+        { [[ ! -x "$dest/usr/bin/sh" && ! -x "$dest/bin/sh" ]]; }; then
+        printf 'bubble: composed generation %s is not bootable\n' "$gen" >&2
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    fi
+    if [[ ! -s "$dest$BUBBLEOS_BOOT_ASSETS_DIR/vmlinuz" ]] ||
+        [[ ! -s "$dest$BUBBLEOS_BOOT_ASSETS_DIR/initramfs.cpio.gz" ]]; then
+        printf 'bubble: generation %s has no boot assets\n' "$gen" >&2
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    fi
+    bubble_generation_lock_json "$gen" >/dev/null || {
+        printf 'bubble: generation %s has an invalid package lock\n' "$gen" >&2
+        btrfs subvolume delete "$dest" >/dev/null 2>&1 || true
+        return 1
+    }
+
+    if [[ "$activate" == "1" ]]; then
+        bubble_generation_activate "$gen" || return 1
+    fi
+    printf '%s\n' "$gen"
+}
+
+bubble_generation_install() {
+    local from="" activate=1 description="" target info
+    local id version type name digest source lock
+    local -a targets=()
+
+    while (( $# )); do
+        case "$1" in
+            --from)
+                [[ $# -ge 2 ]] || {
+                    printf 'bubble: --from requires a generation\n' >&2
+                    return 2
+                }
+                from="$2"
+                shift 2
+                ;;
+            --from=*)
+                from="${1#*=}"
+                shift
+                ;;
+            --no-activate)
+                activate=0
+                shift
+                ;;
+            --activate)
+                activate=1
+                shift
+                ;;
+            --description)
+                [[ $# -ge 2 ]] || {
+                    printf 'bubble: --description requires a value\n' >&2
+                    return 2
+                }
+                description="$2"
+                shift 2
+                ;;
+            --description=*)
+                description="${1#*=}"
+                shift
+                ;;
+            --)
+                shift
+                targets+=("$@")
+                break
+                ;;
+            -*)
+                printf 'bubble: unknown install option: %s\n' "$1" >&2
+                return 2
+                ;;
+            *)
+                targets+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    (( ${#targets[@]} > 0 )) || {
+        printf 'bubble: install requires at least one package or LPK\n' >&2
+        return 2
+    }
+    bubble_require_root || return 1
+    bubble_require_generation_layout || return 1
+    bubble_store_require || return 1
+
+    source="${from:-$(bubble_generation_current)}" || {
+        printf 'bubble: no active generation to extend\n' >&2
+        return 1
+    }
+    bubble_generation_exists "$source" || {
+        printf 'bubble: generation %s does not exist\n' "$source" >&2
+        return 1
+    }
+    lock="$(bubble_generation_lock_json "$source")" || return 1
+
+    local -a repo_targets=()
+    for target in "${targets[@]}"; do
+        if [[ -f "$target" ]]; then
+            bubble_store_ulpm add "$target" >&2 || return 1
+            info="$(bubble_store_info_for_file "$target")" || return 1
+        elif info="$(bubble_store_info_for_id "$target" 2>/dev/null)"; then
+            :
+        else
+            # Not a local payload and not already stored: resolve it against
+            # the verified system repositories with its dependencies.
+            repo_targets+=("$target")
+            continue
+        fi
+        IFS=$'\t' read -r id version type name digest <<< "$info"
+        [[ -n "$id" && -n "$version" && -n "$digest" ]] || {
+            printf 'bubble: cannot resolve package metadata for %s\n' \
+                "$target" >&2
+            return 1
+        }
+        case "$type" in
+            ""|rootfs|os|distro|system) ;;
+            *)
+                printf 'bubble: %s is not a system package (type %s)\n' \
+                    "$id" "$type" >&2
+                return 1
+                ;;
+        esac
+        lock="$(bubble_package_lock_add \
+            "$lock" "$id" "$version" "$digest" "$type" "$name")" || return 1
+    done
+
+    if (( ${#repo_targets[@]} > 0 )); then
+        local plan
+        plan="$(bubble_resolve_plan "$source" install --lock "$lock" \
+            "${repo_targets[@]}")" || return 1
+        bubble_repo_apply_plan "$source" "$plan" "$description" "$activate"
+        return
+    fi
+
+    bubble_package_lock_verify "$lock" || return 1
+    bubble_generation_compose_from \
+        "$source" "$lock" "$description" "$activate"
+}
+
+bubble_generation_remove() {
+    local from="" activate=1 description="" id="" lock source
+    while (( $# )); do
+        case "$1" in
+            --from)
+                [[ $# -ge 2 ]] || {
+                    printf 'bubble: --from requires a generation\n' >&2
+                    return 2
+                }
+                from="$2"
+                shift 2
+                ;;
+            --from=*)
+                from="${1#*=}"
+                shift
+                ;;
+            --no-activate)
+                activate=0
+                shift
+                ;;
+            --activate)
+                activate=1
+                shift
+                ;;
+            --description)
+                [[ $# -ge 2 ]] || {
+                    printf 'bubble: --description requires a value\n' >&2
+                    return 2
+                }
+                description="$2"
+                shift 2
+                ;;
+            --description=*)
+                description="${1#*=}"
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                printf 'bubble: unknown remove option: %s\n' "$1" >&2
+                return 2
+                ;;
+            *)
+                if [[ -n "$id" ]]; then
+                    printf 'bubble: remove accepts one package id\n' >&2
+                    return 2
+                fi
+                id="$1"
+                shift
+                ;;
+        esac
+    done
+
+    [[ -n "$id" ]] || {
+        printf 'bubble: remove requires a package id\n' >&2
+        return 2
+    }
+    bubble_require_root || return 1
+    bubble_require_generation_layout || return 1
+    bubble_store_require || return 1
+
+    source="${from:-$(bubble_generation_current)}" || {
+        printf 'bubble: no active generation to modify\n' >&2
+        return 1
+    }
+    bubble_generation_exists "$source" || {
+        printf 'bubble: generation %s does not exist\n' "$source" >&2
+        return 1
+    }
+    lock="$(bubble_generation_lock_json "$source")" || return 1
+    if ! jq -e --arg id "$id" \
+        '.packages[]? | select(.id == $id)' <<< "$lock" >/dev/null; then
+        printf 'bubble: package %s is not installed in generation %s\n' \
+            "$id" "$source" >&2
+        return 1
+    fi
+    lock="$(bubble_package_lock_remove "$lock" "$id")" || return 1
+    bubble_package_lock_verify "$lock" || return 1
+    bubble_generation_compose_from \
+        "$source" "$lock" "$description" "$activate"
+}
+
+# ------------------------------------------------------------------------------
+# Generation lifecycle: deletion and pruning
+# ------------------------------------------------------------------------------
+
+bubble_generation_running() {
+    local gen
+    gen="$(sed -n 's/^GENERATION=//p' /etc/bubbleos/generation 2>/dev/null |
+        head -n1)"
+    [[ "$gen" =~ ^[0-9]{6}$ ]] || return 1
+    printf '%s\n' "$gen"
+}
+
+# bubble_generation_lock_referrers <gen>
+#
+# Prints the generations whose package lock names <gen> as its composition
+# base. Fails if a lock exists but cannot be parsed: deleting a base without
+# knowing every user would break future recompositions.
+bubble_generation_lock_referrers() {
+    local base="${1:-}" gen file
+    [[ -n "$base" ]] || return 1
+    while IFS= read -r gen; do
+        [[ "$gen" =~ ^[0-9]{6}$ ]] || continue
+        [[ "$gen" == "$base" ]] && continue
+        file="$(bubble_generation_lock_path "$gen")"
+        [[ -e "$file" || -L "$file" ]] || continue
+        if [[ ! -f "$file" || -L "$file" ]]; then
+            printf 'bubble: invalid package lock in generation %s: %s\n' \
+                "$gen" "$file" >&2
+            return 2
+        fi
+        if ! jq -e 'type == "object" and ((.packages // []) | type == "array")' \
+            "$file" >/dev/null 2>&1; then
+            printf 'bubble: cannot parse the package lock of generation %s\n' \
+                "$gen" >&2
+            return 2
+        fi
+        if jq -e --arg base "$base" '.base_generation == $base' "$file" \
+            >/dev/null 2>&1; then
+            printf '%s\n' "$gen"
+        fi
+    done < <(bubble_generation_list)
+}
+
+# bubble_generation_delete <gen>
+#
+# Deletes a generation subvolume. The current, previous and running
+# generations are never removable, and neither is a generation used as the
+# composition base of another generation lock.
+bubble_generation_delete() {
+    local gen="${1:-}" path current previous running refs
+    local -a reasons=()
+    local item joined
+
+    if [[ -z "$gen" ]]; then
+        printf 'bubble: generation delete requires a generation number\n' >&2
+        return 2
+    fi
+    if [[ ! "$gen" =~ ^[0-9]{6}$ ]]; then
+        printf 'bubble: invalid generation number: %s\n' "$gen" >&2
+        return 2
+    fi
+
+    bubble_require_root || return 1
+    bubble_require_generation_layout || return 1
+    bubble_generation_exists "$gen" || {
+        printf 'bubble: generation %s does not exist\n' "$gen" >&2
+        return 1
+    }
+    command -v jq >/dev/null 2>&1 || {
+        printf 'bubble: jq is required to check generation references\n' >&2
+        return 1
+    }
+
+    path="$(bubble_generation_path "$gen")"
+    if [[ -L "$path" ]]; then
+        printf 'bubble: refusing to delete a symlinked generation: %s\n' \
+            "$path" >&2
+        return 1
+    fi
+
+    current="$(bubble_generation_current 2>/dev/null || true)"
+    previous="$(bubble_generation_previous 2>/dev/null || true)"
+    running="$(bubble_generation_running 2>/dev/null || true)"
+
+    [[ "$gen" != "$current" ]] || reasons+=("the current generation")
+    [[ "$gen" != "$previous" ]] || reasons+=("the previous generation")
+    [[ "$gen" != "$running" ]] || reasons+=("the running generation")
+
+    refs="$(bubble_generation_lock_referrers "$gen")" || return 1
+    if [[ -n "$refs" ]]; then
+        reasons+=("the base generation of ${refs//$'\n'/, }")
+    fi
+
+    if (( ${#reasons[@]} > 0 )); then
+        joined=""
+        for item in "${reasons[@]}"; do
+            joined+="${joined:+; }$item"
+        done
+        printf 'bubble: refusing to delete generation %s: it is %s\n' \
+            "$gen" "$joined" >&2
+        return 1
+    fi
+
+    if ! btrfs subvolume delete "$path" >/dev/null; then
+        printf 'bubble: failed to delete generation %s\n' "$gen" >&2
+        return 1
+    fi
+    sync
+    printf 'Deleted generation %s\n' "$gen"
+}
+
+# bubble_generation_prune [--keep N] [--dry-run]
+#
+# Keeps the newest N generations, plus the current, previous and running
+# generations and every generation used as a composition base by a survivor.
+# Base references are closed transitively before anything is deleted.
+bubble_generation_prune() {
+    local keep=3 dry_run=0
+    local -a all=()
+    local -A keep_set=()
+    local gen path base current previous running start index changed
+    local lock_json removed=0 failed=0
+
+    while (( $# )); do
+        case "$1" in
+            --keep)
+                if (( $# < 2 )); then
+                    printf 'bubble: generation prune --keep requires a number\n' >&2
+                    return 2
+                fi
+                keep="$2"
+                shift 2
+                ;;
+            --keep=*)
+                keep="${1#*=}"
+                shift
+                ;;
+            --dry-run|-n)
+                dry_run=1
+                shift
+                ;;
+            *)
+                printf 'bubble: unknown generation prune option: %s\n' "$1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    [[ "$keep" =~ ^[0-9]+$ ]] || {
+        printf 'bubble: --keep must be a non-negative integer\n' >&2
+        return 2
+    }
+
+    bubble_require_root || return 1
+    bubble_require_generation_layout || return 1
+    command -v jq >/dev/null 2>&1 || {
+        printf 'bubble: jq is required to check generation references\n' >&2
+        return 1
+    }
+
+    while IFS= read -r gen; do
+        [[ "$gen" =~ ^[0-9]{6}$ ]] || continue
+        all+=("$gen")
+    done < <(bubble_generation_list)
+
+    (( ${#all[@]} > 0 )) || {
+        printf 'No generations to prune.\n'
+        return 0
+    }
+
+    start=$(( ${#all[@]} - keep ))
+    (( start >= 0 )) || start=0
+    for (( index = start; index < ${#all[@]}; index++ )); do
+        keep_set["${all[$index]}"]=1
+    done
+
+    current="$(bubble_generation_current 2>/dev/null || true)"
+    previous="$(bubble_generation_previous 2>/dev/null || true)"
+    running="$(bubble_generation_running 2>/dev/null || true)"
+    [[ -z "$current" ]] || keep_set["$current"]=1
+    [[ -z "$previous" ]] || keep_set["$previous"]=1
+    [[ -z "$running" ]] || keep_set["$running"]=1
+
+    changed=1
+    while (( changed )); do
+        changed=0
+        for gen in "${all[@]}"; do
+            [[ -n "${keep_set[$gen]:-}" ]] || continue
+            lock_json="$(bubble_generation_lock_json "$gen")" || {
+                printf 'bubble: cannot read the package lock of generation %s; refusing to prune\n' \
+                    "$gen" >&2
+                return 1
+            }
+            base="$(jq -r '.base_generation // empty' <<< "$lock_json")" || {
+                printf 'bubble: cannot read the package lock of generation %s; refusing to prune\n' \
+                    "$gen" >&2
+                return 1
+            }
+            [[ -n "$base" ]] || continue
+            if [[ -z "${keep_set[$base]:-}" ]]; then
+                keep_set["$base"]=1
+                changed=1
+            fi
+        done
+    done
+
+    for gen in "${all[@]}"; do
+        [[ -n "${keep_set[$gen]:-}" ]] && continue
+        path="$(bubble_generation_path "$gen")"
+        if [[ -L "$path" ]]; then
+            printf 'bubble: skipping symlinked generation: %s\n' "$path" >&2
+            failed=1
+            continue
+        fi
+        if (( dry_run )); then
+            printf 'would delete generation %s\n' "$gen"
+            continue
+        fi
+        if btrfs subvolume delete "$path" >/dev/null 2>&1; then
+            printf 'Deleted generation %s\n' "$gen"
+            removed=$((removed + 1))
+        else
+            printf 'bubble: failed to delete generation %s\n' "$gen" >&2
+            failed=1
+        fi
+    done
+
+    if (( dry_run )); then
+        return 0
+    fi
+    (( removed == 0 )) || sync
+    if (( removed == 0 && failed == 0 )); then
+        printf 'No generations to prune.\n'
+    fi
+    (( failed == 0 ))
+}
+
+bubble_generation_compose() {
+    local from="" activate=0 description="" source lock
+    while (( $# )); do
+        case "$1" in
+            --from)
+                [[ $# -ge 2 ]] || {
+                    printf 'bubble: --from requires a generation\n' >&2
+                    return 2
+                }
+                from="$2"
+                shift 2
+                ;;
+            --from=*)
+                from="${1#*=}"
+                shift
+                ;;
+            --activate)
+                activate=1
+                shift
+                ;;
+            --description)
+                [[ $# -ge 2 ]] || {
+                    printf 'bubble: --description requires a value\n' >&2
+                    return 2
+                }
+                description="$2"
+                shift 2
+                ;;
+            --description=*)
+                description="${1#*=}"
+                shift
+                ;;
+            *)
+                printf 'bubble: unknown compose option: %s\n' "$1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    bubble_require_root || return 1
+    bubble_require_generation_layout || return 1
+    bubble_store_require || return 1
+    source="${from:-$(bubble_generation_current)}" || {
+        printf 'bubble: no active generation to compose\n' >&2
+        return 1
+    }
+    bubble_generation_exists "$source" || {
+        printf 'bubble: generation %s does not exist\n' "$source" >&2
+        return 1
+    }
+    lock="$(bubble_generation_lock_json "$source")" || return 1
+    bubble_package_lock_verify "$lock" || return 1
+    bubble_generation_compose_from \
+        "$source" "$lock" "$description" "$activate"
 }

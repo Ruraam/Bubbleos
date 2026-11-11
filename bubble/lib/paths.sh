@@ -10,7 +10,13 @@
 : "${BUBBLEOS_RUN_DIR:=/run/bubbleos}"
 : "${BUBBLEOS_CHANNEL:=development}"
 : "${BUBBLEOS_ULPM_DIR:=/opt/bubbleos/ulpm}"
+: "${BUBBLEOS_ULPM_CONFIG_DIR:=${BUBBLEOS_STATE_DIR}/ulpm}"
+: "${BUBBLEOS_ULPM_CACHE_DIR:=${BUBBLEOS_CACHE_DIR}/ulpm}"
 : "${BUBBLEOS_ROOTFS_MOUNT:=${BUBBLEOS_STATE_DIR}/rootfs}"
+: "${BUBBLEOS_STORE_DIR:=${BUBBLEOS_STATE_DIR}/store}"
+: "${BUBBLEOS_STORE_OBJECTS_DIR:=${BUBBLEOS_STORE_DIR}/objects}"
+: "${BUBBLEOS_STORE_PACKAGES_DIR:=${BUBBLEOS_STORE_DIR}/packages}"
+: "${BUBBLEOS_BOOT_ASSETS_DIR:=/usr/lib/bubbleos/boot}"
 : "${BUBBLEOS_SNAPSHOTS_DIR:=/snapshots}"
 : "${BUBBLEOS_GENERATIONS_DIR:=${BUBBLEOS_ROOTFS_MOUNT}/generations}"
 : "${BUBBLEOS_CURRENT_LINK:=${BUBBLEOS_ROOTFS_MOUNT}/current}"
@@ -54,8 +60,10 @@ bubble_init_paths() {
         "$BUBBLEOS_ROOTFS_MOUNT" \
         "${BUBBLEOS_STATE_DIR}/transactions" \
         "${BUBBLEOS_STATE_DIR}/store" \
+        "${BUBBLEOS_STATE_DIR}/ulpm" \
         "${BUBBLEOS_STATE_DIR}/wal" \
         "$BUBBLEOS_CONFIG_DIR" \
         "$BUBBLEOS_CACHE_DIR" \
+        "$BUBBLEOS_ULPM_CACHE_DIR" \
         "$BUBBLEOS_RUN_DIR"
 }
