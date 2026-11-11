@@ -92,6 +92,23 @@ assert_rust_call() {
     [[ "$(cat "$BUBBLEOS_STUB_CONFIG_FILE")" == "$EXPECTED_CONFIG" ]]
 }
 
+assert_rust_call() {
+    local expected_command="$1" function_name="$2" expected_argument=""
+    shift 2
+    if (( $# )); then
+        expected_argument="$1"
+    fi
+    "$function_name" "$@"
+
+    if [[ -n "$expected_argument" ]]; then
+        expected_args="$(printf '%s\n%s' "$expected_command" "$expected_argument")"
+    else
+        expected_args="$expected_command"
+    fi
+    [[ "$(cat "$BUBBLEOS_STUB_ARGS_FILE")" == "$expected_args" ]]
+    [[ "$(cat "$BUBBLEOS_STUB_CONFIG_FILE")" == "$EXPECTED_CONFIG" ]]
+}
+
 assert_rust_call require-root bubble_require_root
 assert_rust_call require-generation bubble_require_generation_layout
 assert_rust_call require-snapshots bubble_require_snapshots_layout
@@ -106,13 +123,10 @@ assert_rust_call generation-previous bubble_generation_previous
 assert_rust_call status bubble_system_status
 assert_rust_call generation-list bubble_generation_list
 assert_rust_call generation-next bubble_generation_next
-assert_rust_call 
-generation-exists\n000123' bubble_generation_exists 000123
-assert_rust_call 
-snapshot-valid-name\nrestore.001' bubble_snapshot_valid_name restore.001
+assert_rust_call generation-exists bubble_generation_exists 000123
+assert_rust_call snapshot-valid-name bubble_snapshot_valid_name restore.001
 assert_rust_call snapshot-pending-path bubble_snapshot_pending_path
-assert_rust_call 
-snapshot-pending-from-file\n'"$TMP_DIR/marker" bubble_snapshot_pending_from_file "$TMP_DIR/marker"
+assert_rust_call snapshot-pending-from-file bubble_snapshot_pending_from_file "$TMP_DIR/marker"
 assert_rust_call snapshot-pending bubble_snapshot_pending
 assert_rust_call snapshot-list bubble_snapshot_list
 
