@@ -66,7 +66,7 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
         .into());
     }
 
-    if argument.is_some() {
+    if argument.is_some() && command != "bootloader-render" {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "this command does not accept an argument",
