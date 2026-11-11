@@ -64,6 +64,10 @@ bubble_generation_next() {
 }
 
 bubble_generation_write_metadata() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-write-metadata "${1:-}" "${2:-}"
+        return $?
+    fi
     local gen="$1" description="${2:-}" file dir
     [[ -n "$description" ]] || description="bubbleOS generation $gen"
     description="${description//$'\n'/ }"
@@ -82,8 +86,8 @@ DESCRIPTION=$description
 METADATA
     chmod 0644 "$file"
     chown root:root "$file"
-}
 
+}
 bubble_snapshot_destination() {
     local dir="$1" base="$2" candidate n=1
     candidate="$dir/$base"
