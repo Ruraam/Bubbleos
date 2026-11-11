@@ -4,7 +4,7 @@
 //! preflight checks to this binary when it is installed. It remains optional
 //! in source checkouts so an incomplete build never breaks the old path.
 
-use bubble_core::{bootloader, require_root, system, BubblePaths};
+use bubble_core::{bootloader, repo, require_root, system, BubblePaths};
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
@@ -15,6 +15,49 @@ const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|r
 fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     let argument = arguments.first().map(OsString::as_os_str);
     let paths = BubblePaths::from_env();
+
+    if command == "version-compare" {
+        let values = arguments
+            .iter()
+            .map(|value| value.to_str())
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "version arguments must be valid UTF-8",
+                )
+            })?;
+        let ordering = repo::compare_versions(values[0], values[1]);
+        let code = match ordering {
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Greater => 1,
+            std::cmp::Ordering::Less => 2,
+        };
+        println!("{code}");
+        return Ok(());
+    }
+
+    if command == "version-matches" {
+        let values = arguments
+            .iter()
+            .map(|value| value.to_str())
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "version arguments must be valid UTF-8",
+                )
+            })?;
+        println!(
+            "{}",
+            if repo::version_matches(values[0], values[1]) {
+                "true"
+            } else {
+                "false"
+            }
+        );
+        return Ok(());
+    }
 
     if command == "generation-exists" {
         let generation = argument.and_then(OsStr::to_str).ok_or_else(|| {
@@ -75,6 +118,7 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     }
 
     match command {
+        "arch" => println!("{}", repo::architecture()),
         "require-root" => require_root()?,
         "init" => paths.initialize()?,
         "require-generation" => paths.require_generation_layout()?,
@@ -198,6 +242,7 @@ fn main() {
 
     let expected_arguments = match command.as_str() {
         "generation-exists" | "snapshot-valid-name" | "snapshot-pending-from-file" => 1,
+        "version-compare" | "version-matches" => 2,
         "bootloader-render" => 4,
         _ => 0,
     };
