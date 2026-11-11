@@ -280,6 +280,7 @@ extern "C" {
 /// Check the effective UID using the operating system, not environment data.
 pub fn require_root() -> Result<(), BubbleSystemError> {
     #[cfg(target_os = "linux")]
+    // SAFETY: geteuid has no preconditions and does not dereference pointers.
     let is_root = unsafe { geteuid() == 0 };
 
     #[cfg(not(target_os = "linux"))]
