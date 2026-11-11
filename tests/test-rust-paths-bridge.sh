@@ -133,6 +133,7 @@ assert_rust_call snapshot-pending-path bubble_snapshot_pending_path
 assert_rust_call snapshot-pending-from-file bubble_snapshot_pending_from_file "$TMP_DIR/marker"
 assert_rust_call snapshot-pending bubble_snapshot_pending
 assert_rust_call snapshot-list bubble_snapshot_list
+assert_rust_call bootloader-root-uuid bubble_bootloader_root_uuid
 assert_rust_call bootloader-render bubble_bootloader_render_config \
     "$TMP_DIR/generations" uuid-test 000010 000009
 
