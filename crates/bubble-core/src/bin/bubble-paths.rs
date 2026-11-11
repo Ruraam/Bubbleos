@@ -4,13 +4,13 @@
 //! preflight checks to this binary when it is installed. It remains optional
 //! in source checkouts so an incomplete build never breaks the old path.
 
-use bubble_core::{bootloader, repo, require_root, system, BubblePaths};
+use bubble_core::{bootloader, repo, require_root, store, system, BubblePaths};
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|generation-create <from-or-empty> <description>|generation-switch-links <target> <expected-current>|generation-write-metadata <number> <description>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|arch|version-compare <left> <right>|version-matches <version> <constraint>|bootloader-root-uuid|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|generation-create <from-or-empty> <description>|generation-switch-links <target> <expected-current>|generation-write-metadata <number> <description>|store-object-dir <digest>|store-object-manifest <digest>|store-latest-version <id>|store-info-id <selector>|store-info-file <path>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|arch|version-compare <left> <right>|version-matches <version> <constraint>|bootloader-root-uuid|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
 
 fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     let argument = arguments.first().map(OsString::as_os_str);
@@ -56,6 +56,61 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
                 "false"
             }
         );
+        return Ok(());
+    }
+
+    if command == "store-object-dir" {
+        let value = argument
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "store-object-dir requires a UTF-8 digest",
+            ))?;
+        println!("{}", paths.store_object_dir(value)?.display());
+        return Ok(());
+    }
+
+    if command == "store-object-manifest" {
+        let value = argument
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "store-object-manifest requires a UTF-8 digest",
+            ))?;
+        println!("{}", paths.store_object_manifest(value)?.display());
+        return Ok(());
+    }
+
+    if command == "store-latest-version" {
+        let value = argument
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "store-latest-version requires a UTF-8 package ID",
+            ))?;
+        println!("{}", paths.store_latest_version(value)?);
+        return Ok(());
+    }
+
+    if command == "store-info-id" {
+        let value = argument
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "store-info-id requires a UTF-8 package selector",
+            ))?;
+        print!("{}", paths.store_info_for_id(value)?);
+        return Ok(());
+    }
+
+    if command == "store-info-file" {
+        let value = argument.ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "store-info-file requires a package path",
+            )
+        })?;
+        print!("{}", paths.store_info_for_file(Path::new(value))?);
         return Ok(());
     }
 
@@ -296,6 +351,7 @@ fn main() {
         "generation-create" => 2,
         "generation-switch-links" => 2,
         "generation-write-metadata" => 2,
+        "store-object-dir" | "store-object-manifest" | "store-latest-version" | "store-info-id" | "store-info-file" => 1,
         "version-compare" | "version-matches" => 2,
         "bootloader-render" => 4,
         _ => 0,
