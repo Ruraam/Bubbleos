@@ -9,8 +9,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::process;
 
-const USAGE: &str =
-    "Usage: bubble-paths <require-root|init|require-generation|require-snapshots>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots>";
 
 fn run(command: &str) -> Result<(), Box<dyn Error>> {
     let paths = BubblePaths::from_env();
