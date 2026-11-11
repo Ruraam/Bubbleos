@@ -69,7 +69,10 @@ fn digest_for_file(file: &Path) -> io::Result<String> {
     if !is_digest(digest) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("sha256sum returned an invalid digest for {}", file.display()),
+            format!(
+                "sha256sum returned an invalid digest for {}",
+                file.display()
+            ),
         ));
     }
     Ok(digest.to_owned())
