@@ -29,7 +29,11 @@ fi
 # shellcheck disable=SC1091
 source "${BUBBLE_DIR}/lib/paths.sh"
 # shellcheck disable=SC1091
+source "${BUBBLE_DIR}/lib/store.sh"
+# shellcheck disable=SC1091
 source "${BUBBLE_DIR}/lib/generation.sh"
+# shellcheck disable=SC1091
+source "${BUBBLE_DIR}/lib/repo.sh"
 # shellcheck disable=SC1091
 source "${BUBBLE_DIR}/lib/system.sh"
 # shellcheck disable=SC1091
@@ -48,8 +52,39 @@ Commands:
   generation create [options]     Clone the current generation
       --from <gen>                Source generation (default: current)
       --description <text>        Generation description
+  generation compose [options]    Rebuild the package set into a new generation
+      --from <gen>                Source generation (default: current)
+      --activate                  Select the new generation for the next boot
+      --description <text>        Generation description
+  generation delete <gen>         Delete an unused generation
+  generation prune [options]      Delete old generations
+      --keep <n>                  Keep the newest N generations (default: 3)
+      --dry-run                   Show what would be deleted
   generation activate <gen>       Select a generation for the next boot
   generation current              Print the selected generation
+  install <lpk|package-id>...     Add packages to a new generation and activate it
+      --from <gen>                Source generation (default: current)
+      --no-activate               Create the generation without selecting it
+      --description <text>        Generation description
+  remove <package-id>             Remove a store package from a new generation
+      --from <gen>                Source generation (default: current)
+      --no-activate               Create the generation without selecting it
+      --description <text>        Generation description
+  packages [--generation <gen>]   List store packages in a generation
+  store <add|list|show|remove|gc|verify>
+                  Manage the ULPM system package store
+  repo <list|add|remove|enable|disable|update|verify|packages|search|index>
+                  Manage signed system repositories
+  update [--no-refresh] [--json]
+                  Refresh signed indexes and list available upgrades
+  upgrade [options] [package...]
+                  Compose and activate a generation with system upgrades
+      --from <gen>                Source generation (default: current)
+      --no-refresh                Use verified cached indexes
+      --no-activate               Create the generation without selecting it
+      --dry-run                   Show the plan without creating a generation
+      --description <text>        Generation description
+  trust <key.pub>                 Trust an Ed25519 LPK publisher key
   snapshots       List read-only restore points
   snapshots prune [--keep N] [--dry-run]
                   Remove old automatic snapshots (initial points are kept)
@@ -60,7 +95,8 @@ Commands:
   help            Show this help
 
 Generations are Btrfs subvolumes under @rootfs/generations.
-The package-driven system installer is not implemented yet.
+System packages are imported into the ULPM store and composed into a new
+generation from its package-free base generation.
 USAGE
 }
 
@@ -91,6 +127,31 @@ case "$cmd" in
                 shift 2
                 gen="$(bubble_generation_create "$@")"
                 printf 'Created generation %s\n' "$gen"
+                bubble_bootloader_sync || true
+                ;;
+            compose)
+                shift 2
+                gen="$(bubble_generation_compose "$@")"
+                if [[ "$(bubble_generation_current 2>/dev/null || true)" == "$gen" ]]; then
+                    bubble_bootloader_sync || true
+                    printf 'Composed and activated generation %s (reboot required)\n' "$gen"
+                else
+                    bubble_bootloader_sync || true
+                    printf 'Composed generation %s\n' "$gen"
+                fi
+                ;;
+            delete)
+                if [[ $# -ne 3 ]]; then
+                    printf 'bubble: generation delete requires exactly one generation number\n\n' >&2
+                    usage >&2
+                    exit 2
+                fi
+                bubble_generation_delete "$3"
+                bubble_bootloader_sync || true
+                ;;
+            prune)
+                shift 2
+                bubble_generation_prune "$@"
                 bubble_bootloader_sync || true
                 ;;
             activate)
@@ -144,6 +205,86 @@ case "$cmd" in
                 exit 2
                 ;;
         esac
+        ;;
+    install)
+        shift
+        gen="$(bubble_generation_install "$@")"
+        bubble_bootloader_sync || true
+        if [[ "$(bubble_generation_current 2>/dev/null || true)" == "$gen" ]]; then
+            printf 'Installed packages in generation %s; activated (reboot required)\n' "$gen"
+        else
+            printf 'Installed packages in generation %s (not activated)\n' "$gen"
+        fi
+        ;;
+    remove)
+        shift
+        gen="$(bubble_generation_remove "$@")"
+        bubble_bootloader_sync || true
+        if [[ "$(bubble_generation_current 2>/dev/null || true)" == "$gen" ]]; then
+            printf 'Removed package in generation %s; activated (reboot required)\n' "$gen"
+        else
+            printf 'Removed package in generation %s (not activated)\n' "$gen"
+        fi
+        ;;
+    packages)
+        shift
+        packages_gen=""
+        while (( $# )); do
+            case "$1" in
+                --generation)
+                    [[ $# -ge 2 ]] || {
+                        printf 'bubble: --generation requires a value\n' >&2
+                        exit 2
+                    }
+                    packages_gen="$2"
+                    shift 2
+                    ;;
+                --generation=*)
+                    packages_gen="${1#*=}"
+                    shift
+                    ;;
+                *)
+                    printf 'bubble: unknown packages option: %s\n' "$1" >&2
+                    exit 2
+                    ;;
+            esac
+        done
+        packages_gen="${packages_gen:-$(bubble_generation_current)}"
+        packages_lines="$(bubble_generation_package_lines "$packages_gen")" || exit 1
+        if [[ -z "$packages_lines" ]]; then
+            printf 'No store packages in generation %s.\n' "$packages_gen"
+        else
+            printf '%-34s %-16s %-8s %s\n' "PACKAGE" "VERSION" "TYPE" "DIGEST"
+            while IFS=$'\t' read -r package_id package_version package_type package_digest; do
+                printf '%-34s %-16s %-8s %s\n' \
+                    "$package_id" "$package_version" "$package_type" "$package_digest"
+            done <<< "$packages_lines"
+        fi
+        ;;
+    store)
+        shift
+        bubble_store_ulpm "$@"
+        ;;
+    repo)
+        shift
+        bubble_repo_command "$@"
+        ;;
+    update)
+        shift
+        bubble_update "$@"
+        ;;
+    upgrade)
+        shift
+        upgrade_before="$(bubble_generation_current 2>/dev/null || true)"
+        bubble_upgrade "$@"
+        upgrade_after="$(bubble_generation_current 2>/dev/null || true)"
+        if [[ "$upgrade_before" != "$upgrade_after" ]]; then
+            bubble_bootloader_sync || true
+        fi
+        ;;
+    trust)
+        shift
+        bubble_trust "$@"
         ;;
     rollback)
         bubble_require_root
