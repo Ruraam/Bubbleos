@@ -99,6 +99,29 @@ pub fn lpk_format_version(paths: &BubblePaths) -> Option<String> {
     ulpm_variable(paths, "ULPM_FORMAT_VERSION")
 }
 
+fn generation_link_name(target: &Path) -> Option<String> {
+    #[cfg(unix)]
+    let name = {
+        use std::os::unix::ffi::OsStrExt;
+        let bytes = target.as_os_str().as_bytes();
+        let bytes = bytes.strip_prefix(b"./").unwrap_or(bytes);
+        bytes.rsplit(|byte| *byte == b'/').next()?
+    };
+
+    #[cfg(not(unix))]
+    let name = {
+        let text = target.to_str()?;
+        let text = text.strip_prefix("./").unwrap_or(text);
+        text.rsplit('/').next()?.as_bytes()
+    };
+
+    if name.len() != 6 || !name.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+
+    String::from_utf8(name.to_vec()).ok()
+}
+
 impl BubblePaths {
     fn generation_from_link(&self, link: &Path) -> Option<String> {
         let metadata = std::fs::symlink_metadata(link).ok()?;
@@ -107,14 +130,11 @@ impl BubblePaths {
         }
 
         let target = std::fs::read_link(link).ok()?;
-        let name = target.file_name()?.to_str()?;
-        if name.len() != 6 || !name.bytes().all(|byte| byte.is_ascii_digit()) {
+        let name = generation_link_name(&target)?;
+        if !self.generations_dir.join(&name).is_dir() {
             return None;
         }
-        if !self.generations_dir.join(name).is_dir() {
-            return None;
-        }
-        Some(name.to_owned())
+        Some(name)
     }
 
     /// Return the current generation only when its link and directory are valid.
@@ -364,6 +384,21 @@ mod tests {
         let paths = paths_for_test(&root);
         assert_eq!(paths.current_generation(), Some("000123".to_owned()));
         assert_eq!(paths.previous_generation(), None);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn generation_link_with_trailing_slash_is_rejected_like_bash() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root();
+        std::fs::create_dir_all(root.join("generations/000123")).unwrap();
+        symlink("generations/000123/", root.join("current")).unwrap();
+
+        let paths = paths_for_test(&root);
+        assert_eq!(paths.current_generation(), None);
 
         std::fs::remove_dir_all(root).unwrap();
     }
