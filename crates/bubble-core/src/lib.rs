@@ -499,5 +499,79 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn initialization_directories_match_legacy_shell_even_with_child_overrides() {
+        let paths = paths_with(&[
+            ("BUBBLEOS_STATE_DIR", "/srv/bubble/state"),
+            ("BUBBLEOS_STORE_DIR", "/srv/custom/store"),
+            ("BUBBLEOS_ULPM_CONFIG_DIR", "/srv/custom/ulpm-config"),
+        ]);
+        let directories = paths.initialization_directories();
+
+        assert!(directories.contains(&PathBuf::from("/srv/bubble/state/store")));
+        assert!(directories.contains(&PathBuf::from("/srv/bubble/state/ulpm")));
+        assert!(!directories.contains(&PathBuf::from("/srv/custom/store")));
+        assert!(!directories.contains(&PathBuf::from("/srv/custom/ulpm-config")));
+    }
+
+    #[test]
+    fn generation_layout_checks_btrfs_before_mountpoint() {
+        let paths = paths_with(&[]);
+        let result = paths.validate_generation_layout_with(
+            |_| false,
+            |_| panic!("mountpoint must not be checked when btrfs is unavailable"),
+        );
+
+        assert_eq!(result, Err(BubbleSystemError::MissingBtrfs));
+    }
+
+    #[test]
+    fn generation_layout_rejects_an_unmounted_rootfs() {
+        let paths = paths_with(&[]);
+        let result = paths.validate_generation_layout_with(
+            |_| true,
+            |_| false,
+        );
+
+        assert_eq!(
+            result,
+            Err(BubbleSystemError::RootfsNotMounted(
+                paths.rootfs_mount.clone()
+            ))
+        );
+    }
+
+    #[test]
+    fn generation_layout_rejects_a_missing_generations_directory() {
+        let paths = paths_with(&[(
+            "BUBBLEOS_GENERATIONS_DIR",
+            "/__bubbleos_test__/missing-generations",
+        )]);
+        let result = paths.validate_generation_layout_with(
+            |_| true,
+            |_| true,
+        );
+
+        assert_eq!(
+            result,
+            Err(BubbleSystemError::GenerationDirectoryMissing(
+                PathBuf::from("/__bubbleos_test__/missing-generations")
+            ))
+        );
+    }
+
+    #[test]
+    fn snapshots_layout_rejects_an_unmounted_snapshots_path() {
+        let paths = paths_with(&[]);
+        let result = paths.validate_snapshots_layout_with(|_| false);
+
+        assert_eq!(
+            result,
+            Err(BubbleSystemError::SnapshotsNotMounted(
+                paths.snapshots_dir.clone()
+            ))
+        );
+    }
+
     use std::path::Path;
 }
