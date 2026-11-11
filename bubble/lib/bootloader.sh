@@ -100,6 +100,10 @@ bubble_bootloader_generation_paths() {
 # the operator boot an older generation from the menu without touching the
 # current link.
 bubble_bootloader_render_config() {
+    if [[ -x "${BUBBLEOS_RUST_PATHS_BIN:-}" ]]; then
+        bubble_rust_paths bootloader-render "${1:-}" "${2:-}" "${3:-}" "${4:-}"
+        return $?
+    fi
     local generations_dir="$1" root_uuid="$2" current="${3:-}" previous="${4:-}"
     local gen label description suffix kernel_path module_path
 
