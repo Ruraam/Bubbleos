@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: bubbleos-rust-ci-v2-${{ github.ref }}
+  group: bubbleos-rust-ci-v3-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
