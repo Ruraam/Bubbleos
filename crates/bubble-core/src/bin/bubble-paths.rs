@@ -10,7 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|arch|version-compare <left> <right>|version-matches <version> <constraint>|bootloader-root-uuid|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|generation-create <from-or-empty> <description>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|arch|version-compare <left> <right>|version-matches <version> <constraint>|bootloader-root-uuid|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
 
 fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     let argument = arguments.first().map(OsString::as_os_str);
@@ -56,6 +56,23 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
                 "false"
             }
         );
+        return Ok(());
+    }
+
+    if command == "generation-create" {
+        let values = arguments
+            .iter()
+            .map(|value| value.to_str())
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "generation arguments must be valid UTF-8",
+                )
+            })?;
+        let from = (!values[0].is_empty()).then_some(values[0]);
+        let generation = paths.generation_create(from, values[1])?;
+        println!("{generation}");
         return Ok(());
     }
 
@@ -242,6 +259,7 @@ fn main() {
 
     let expected_arguments = match command.as_str() {
         "generation-exists" | "snapshot-valid-name" | "snapshot-pending-from-file" => 1,
+        "generation-create" => 2,
         "version-compare" | "version-matches" => 2,
         "bootloader-render" => 4,
         _ => 0,
