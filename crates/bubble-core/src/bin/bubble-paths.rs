@@ -4,7 +4,7 @@
 //! preflight checks to this binary when it is installed. It remains optional
 //! in source checkouts so an incomplete build never breaks the old path.
 
-use bubble_core::{generations, require_root, system, BubblePaths};
+use bubble_core::{require_root, system, BubblePaths};
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::process;
