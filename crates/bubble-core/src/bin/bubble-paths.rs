@@ -10,7 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|bootloader-root-uuid|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
 
 fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     let argument = arguments.first().map(OsString::as_os_str);
@@ -142,6 +142,15 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
                 println!("{snapshot}");
             }
         }
+        "bootloader-root-uuid" => println!(
+            "{}",
+            bootloader::root_uuid(&paths.rootfs_mount).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "cannot determine the RootFS UUID",
+                )
+            })?
+        ),
         "bootloader-render" => {
             let values = arguments
                 .iter()
