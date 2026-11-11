@@ -20,7 +20,13 @@ fn run(command: &str) -> Result<(), Box<dyn Error>> {
         "init" => paths.initialize()?,
         "require-generation" => paths.require_generation_layout()?,
         "require-snapshots" => paths.require_snapshots_layout()?,
-        _ => return Err(format!("unknown command: {command}").into()),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("unknown command: {command}"),
+            )
+            .into());
+        }
     }
 
     Ok(())
