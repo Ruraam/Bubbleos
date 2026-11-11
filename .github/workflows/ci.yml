@@ -39,6 +39,8 @@ jobs:
             echo "::endgroup::"
           done
 
+          bash tests/test-rust-paths-bridge.sh
+
   build-settings:
     name: Build GTK settings application
     runs-on: ubuntu-latest
@@ -102,3 +104,24 @@ jobs:
       - name: Run Rust tests
         if: steps.rust-workspace.outputs.present == 'true'
         run: cargo test --offline --locked --workspace --all-features
+
+  rust-debian-target:
+    name: Rust build on Debian 13 target
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie-slim
+    steps:
+      - name: Install Git and target Rust toolchain
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates git cargo rustc
+
+      - name: Check out BubbleOS_rust
+        uses: actions/checkout@v6
+
+      - name: Build and test with Debian packages
+        run: |
+          rustc --version
+          cargo build --offline --locked --release --workspace --all-targets --all-features
+          cargo test --offline --locked --workspace --all-features
+          target/release/bubble-paths require-root
