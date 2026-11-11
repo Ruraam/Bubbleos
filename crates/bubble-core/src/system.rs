@@ -38,7 +38,7 @@ fn command_output(program: &str, arguments: &[&str]) -> Option<String> {
 
 fn parse_root_subvolume(options: &str) -> String {
     options
-        .split(|character| character == ',' || character == '\n')
+        .split([',', '\n'])
         .find_map(|option| option.strip_prefix("subvol="))
         .map(|path| path.trim_start_matches('/').to_owned())
         .unwrap_or_default()
