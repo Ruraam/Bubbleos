@@ -8,8 +8,8 @@ use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 
-pub mod generations;
 pub mod bootloader;
+pub mod generations;
 pub mod snapshots;
 pub mod system;
 
