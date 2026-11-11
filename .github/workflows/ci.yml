@@ -101,6 +101,10 @@ jobs:
         if: steps.rust-workspace.outputs.present == 'true'
         run: cargo build --offline --locked --workspace --all-targets --all-features
 
+      - name: Verify Limine renderer shell parity
+        if: steps.rust-workspace.outputs.present == 'true'
+        run: bash tests/test-limine-render-parity.sh
+
       - name: Run Rust tests
         if: steps.rust-workspace.outputs.present == 'true'
         run: cargo test --offline --locked --workspace --all-features
@@ -114,7 +118,7 @@ jobs:
       - name: Install Git and target Rust toolchain
         run: |
           apt-get update
-          apt-get install --yes --no-install-recommends ca-certificates git cargo rustc
+          apt-get install --yes --no-install-recommends bash ca-certificates git cargo rustc
 
       - name: Check out BubbleOS_rust
         uses: actions/checkout@v6
@@ -124,4 +128,5 @@ jobs:
           rustc --version
           cargo build --offline --locked --release --workspace --all-targets --all-features
           cargo test --offline --locked --workspace --all-features
+          bash tests/test-limine-render-parity.sh target/release/bubble-paths
           target/release/bubble-paths require-root
