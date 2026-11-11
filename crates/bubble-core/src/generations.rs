@@ -128,7 +128,9 @@ fn replace_symlink_atomically(link: &Path, target: &str) -> io::Result<()> {
     let sequence = LINK_TEMP_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
     let temporary = parent.join(format!(
         ".{}.{}.{}.tmp",
-        link.file_name().and_then(|name| name.to_str()).unwrap_or("bubble-link"),
+        link.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("bubble-link"),
         std::process::id(),
         sequence
     ));
@@ -321,13 +323,9 @@ impl BubblePaths {
             remove_symlink_if_present(&self.previous_link)?;
         }
 
-        replace_symlink_atomically(
-            &self.current_link,
-            &format!("generations/{generation}"),
-        )?;
+        replace_symlink_atomically(&self.current_link, &format!("generations/{generation}"))?;
 
-        let status = Command::new("sync")
-            .status()?;
+        let status = Command::new("sync").status()?;
         if !status.success() {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
@@ -495,9 +493,7 @@ mod tests {
         symlink("generations/000123", root.join("current")).unwrap();
 
         let paths = paths_for_test(&root);
-        paths
-            .generation_switch_links("000124", "000123")
-            .unwrap();
+        paths.generation_switch_links("000124", "000123").unwrap();
 
         assert_eq!(
             std::fs::read_link(root.join("previous")).unwrap(),
