@@ -268,7 +268,7 @@ bubble_version_compare() {
         case "$result" in
             0|1|2) return "$result" ;;
             *)
-                printf 'bubble: invalid Rust version comparison result: %s\\n' "$result" >&2
+                printf 'bubble: invalid Rust version comparison result: %s\n' "$result" >&2
                 return 3
                 ;;
         esac
