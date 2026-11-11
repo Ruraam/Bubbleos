@@ -98,41 +98,66 @@ impl BubblePaths {
 static RESTORE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn command_success(program: &str, arguments: &[&str]) -> io::Result<bool> {
-    Ok(Command::new(program).args(arguments).stdout(Stdio::null())
-        .stderr(Stdio::null()).status()?.success())
+    Ok(Command::new(program)
+        .args(arguments)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?
+        .success())
 }
 
 fn utc_timestamp(format: &str) -> io::Result<String> {
-    let output = Command::new("date").args(["-u", format])
-        .stderr(Stdio::null()).output()?;
+    let output = Command::new("date")
+        .args(["-u", format])
+        .stderr(Stdio::null())
+        .output()?;
     if !output.status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "could not obtain a UTC timestamp"));
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "could not obtain a UTC timestamp",
+        ));
     }
+
     let value = String::from_utf8(output.stdout)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let value = value.trim_end_matches('\n');
-    if value.is_empty() || !value.bytes().all(|byte|
-        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b':' | b'T' | b'Z')) {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "date returned an invalid timestamp"));
+    if value.is_empty()
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b':' | b'T' | b'Z')
+        })
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "date returned an invalid timestamp",
+        ));
     }
+
     Ok(value.to_owned())
 }
 
 fn ensure_real_directory(path: &Path, create: bool) -> io::Result<()> {
     match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!("refusing to use a symlink as a snapshot directory: {}", path.display()),
-        )),
-        Ok(metadata) if !metadata.is_dir() => return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("snapshot path is not a directory: {}", path.display()),
-        )),
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "refusing to use a symlink as a snapshot directory: {}",
+                    path.display()
+                ),
+            ));
+        }
+        Ok(metadata) if !metadata.is_dir() => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("snapshot path is not a directory: {}", path.display()),
+            ));
+        }
         Ok(_) => return Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound && !create => return Err(error),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
+
     fs::create_dir_all(path)?;
     ensure_real_directory(path, false)
 }
@@ -141,17 +166,23 @@ fn ensure_snapshot_category(paths: &BubblePaths, category: &str) -> io::Result<P
     ensure_real_directory(&paths.snapshots_dir, false)?;
     let directory = paths.snapshots_dir.join(category);
     ensure_real_directory(&directory, true)?;
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o755))?;
     }
+
     Ok(directory)
 }
 
 fn unique_snapshot_destination(directory: &Path, base: &str) -> io::Result<PathBuf> {
     for suffix in 1_u64..=u64::MAX {
-        let name = if suffix == 1 { base.to_owned() } else { format!("{base}-{suffix}") };
+        let name = if suffix == 1 {
+            base.to_owned()
+        } else {
+            format!("{base}-{suffix}")
+        };
         let candidate = directory.join(name);
         match fs::symlink_metadata(&candidate) {
             Ok(_) => continue,
@@ -159,57 +190,132 @@ fn unique_snapshot_destination(directory: &Path, base: &str) -> io::Result<PathB
             Err(error) => return Err(error),
         }
     }
-    Err(io::Error::new(io::ErrorKind::AlreadyExists, "could not allocate a unique snapshot name"))
+
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique snapshot name",
+    ))
 }
 
 fn run_btrfs_snapshot(source: &Path, destination: &Path) -> io::Result<()> {
-    let status = Command::new("btrfs").args(["subvolume", "snapshot", "-r"])
-        .arg(source).arg(destination).stdout(Stdio::null()).status()?;
+    let status = Command::new("btrfs")
+        .args(["subvolume", "snapshot", "-r"])
+        .arg(source)
+        .arg(destination)
+        .stdout(Stdio::null())
+        .status()?;
     if !status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, format!(
-            "Btrfs snapshot creation failed: {} -> {}", source.display(), destination.display()
-        )));
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Btrfs snapshot creation failed: {} -> {}",
+                source.display(),
+                destination.display()
+            ),
+        ));
     }
+
     Ok(())
 }
 
 fn is_mountpoint(path: &Path) -> bool {
-    Command::new("mountpoint").arg("-q").arg("--").arg(path)
-        .stdout(Stdio::null()).stderr(Stdio::null()).status()
-        .map(|status| status.success()).unwrap_or(false)
+    Command::new("mountpoint")
+        .arg("-q")
+        .arg("--")
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 fn is_read_only_btrfs_subvolume(path: &Path) -> io::Result<bool> {
-    let output = Command::new("btrfs").args(["property", "get", "-ts"])
-        .arg(path).arg("ro").stderr(Stdio::null()).output()?;
-    if !output.status.success() { return Ok(false); }
+    let output = Command::new("btrfs")
+        .args(["property", "get", "-ts"])
+        .arg(path)
+        .arg("ro")
+        .stderr(Stdio::null())
+        .output()?;
+    if !output.status.success() {
+        return Ok(false);
+    }
+
     Ok(String::from_utf8_lossy(&output.stdout).trim() == "ro=true")
 }
 
 fn valid_snapshot_label(label: &str) -> bool {
-    !label.is_empty() && !label.starts_with('.') && label.bytes().all(|byte|
-        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    !label.is_empty()
+        && !label.starts_with('.')
+        && label.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+        })
+}
+
+fn create_restore_temp(parent: &Path) -> io::Result<(PathBuf, File)> {
+    for _ in 0..128 {
+        let sequence = RESTORE_TEMP_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
+        let temporary = parent.join(format!(
+            ".var-restore.request.{}.{}.tmp",
+            std::process::id(),
+            sequence
+        ));
+
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+
+        match options.open(&temporary) {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique restore marker temporary file",
+    ))
 }
 
 impl BubblePaths {
     /// Create a read-only snapshot of a generation using the legacy naming scheme.
-    pub fn snapshot_create_generation(&self, generation: &str, label: &str) -> io::Result<PathBuf> {
+    pub fn snapshot_create_generation(
+        &self,
+        generation: &str,
+        label: &str,
+    ) -> io::Result<PathBuf> {
         if !Self::is_generation_number(generation) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "snapshot generation must be a six-digit number"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "snapshot generation must be a six-digit number",
+            ));
         }
         if !valid_snapshot_label(label) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "snapshot label contains unsafe characters"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "snapshot label contains unsafe characters",
+            ));
         }
+
         let source = self.generations_dir.join(generation);
         let metadata = fs::symlink_metadata(&source)?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("generation is not a real directory: {}", source.display())));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("generation is not a real directory: {}", source.display()),
+            ));
         }
+
         let directory = ensure_snapshot_category(self, "rootfs")?;
-        let base = format!("{}-{generation}-{label}", utc_timestamp("+%Y%m%dT%H%M%SZ")?);
+        let base = format!(
+            "{}-{generation}-{label}",
+            utc_timestamp("+%Y%m%dT%H%M%SZ")?
+        );
         let destination = unique_snapshot_destination(&directory, &base)?;
         run_btrfs_snapshot(&source, &destination)?;
         Ok(destination)
@@ -218,18 +324,26 @@ impl BubblePaths {
     /// Create a read-only snapshot of the mounted /var Btrfs subvolume.
     pub fn snapshot_create_var(&self, label: &str) -> io::Result<PathBuf> {
         if !valid_snapshot_label(label) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "snapshot label contains unsafe characters"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "snapshot label contains unsafe characters",
+            ));
         }
+
         let source = Path::new("/var");
         if !is_mountpoint(source) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "/var is not a mount point; cannot snapshot it"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "/var is not a mount point; cannot snapshot it",
+            ));
         }
         if !command_success("btrfs", &["subvolume", "show", "/var"])? {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "/var is not a Btrfs subvolume; cannot snapshot it"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "/var is not a Btrfs subvolume; cannot snapshot it",
+            ));
         }
+
         let directory = ensure_snapshot_category(self, "var")?;
         let base = format!("{}-{label}", utc_timestamp("+%Y%m%dT%H%M%SZ")?);
         let destination = unique_snapshot_destination(&directory, &base)?;
@@ -241,45 +355,53 @@ impl BubblePaths {
     pub fn snapshot_schedule_restore(&self, requested_name: &str) -> io::Result<String> {
         let name = requested_name.strip_prefix("var/").unwrap_or(requested_name);
         if !snapshot_valid_name(name) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("invalid snapshot name: {name}")));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid snapshot name: {name}"),
+            ));
         }
+
         ensure_real_directory(&self.snapshots_dir, false)?;
         let var_directory = self.snapshots_dir.join("var");
         ensure_real_directory(&var_directory, false)?;
         let snapshot = var_directory.join(name);
         let metadata = fs::symlink_metadata(&snapshot).map_err(|error| {
             if error.kind() == io::ErrorKind::NotFound {
-                io::Error::new(io::ErrorKind::NotFound, format!("/var snapshot does not exist: {name}"))
-            } else { error }
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("/var snapshot does not exist: {name}"),
+                )
+            } else {
+                error
+            }
         })?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("/var snapshot is not a real directory: {name}")));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("/var snapshot is not a real directory: {name}"),
+            ));
         }
         if !is_read_only_btrfs_subvolume(&snapshot)? {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("{name} is not a read-only snapshot")));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{name} is not a read-only snapshot"),
+            ));
         }
 
         let timestamp = utc_timestamp("+%Y-%m-%dT%H:%M:%SZ")?;
-        let from = self.current_generation().unwrap_or_else(|| "unknown".to_owned());
+        let from = self
+            .current_generation()
+            .unwrap_or_else(|| "unknown".to_owned());
         let marker = self.snapshot_pending_path();
-        let parent = marker.parent().ok_or_else(|| io::Error::new(
-            io::ErrorKind::InvalidInput, "restore marker has no parent directory"
-        ))?;
-        let sequence = RESTORE_TEMP_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
-        let temporary = parent.join(format!(".var-restore.request.{}.{}.tmp", std::process::id(), sequence));
+        let parent = marker.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "restore marker has no parent directory",
+            )
+        })?;
+        let (temporary, mut file) = create_restore_temp(parent)?;
 
         let write_result = (|| -> io::Result<()> {
-            let mut options = OpenOptions::new();
-            options.write(true).create_new(true);
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options.mode(0o600);
-            }
-            let mut file = options.open(&temporary)?;
             writeln!(file, "SNAPSHOT={name}")?;
             writeln!(file, "REQUESTED_AT={timestamp}")?;
             writeln!(file, "REQUESTED_FROM={from}")?;
@@ -288,11 +410,15 @@ impl BubblePaths {
             File::open(parent)?.sync_all()?;
             Ok(())
         })();
+
         if let Err(error) = write_result {
             let _ = fs::remove_file(&temporary);
             return Err(error);
         }
-        Ok(format!("bubble: /var restore from {name} scheduled for the next boot"))
+
+        Ok(format!(
+            "bubble: /var restore from {name} scheduled for the next boot"
+        ))
     }
 }
 
