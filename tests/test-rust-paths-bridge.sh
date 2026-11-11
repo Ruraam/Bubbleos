@@ -90,6 +90,8 @@ source "$ROOT/bubble/lib/paths.sh"
 # shellcheck disable=SC1091
 source "$ROOT/bubble/lib/system.sh"
 # shellcheck disable=SC1091
+source "$ROOT/bubble/lib/repo.sh"
+# shellcheck disable=SC1091
 source "$ROOT/bubble/lib/generation.sh"
 # shellcheck disable=SC1091
 source "$ROOT/bubble/lib/bootloader.sh"
