@@ -317,7 +317,7 @@ if [[ "$BUILD_RUST_CORE" == "1" ]]; then
     chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
         apt-get install -y -qq --no-install-recommends rustc cargo
 
-    chroot "$ROOTFS" cargo build --offline --release \
+    chroot "$ROOTFS" cargo build --offline --locked --release \
         --manifest-path /usr/src/bubbleos/rust/Cargo.toml \
         --bin bubble-paths
 
