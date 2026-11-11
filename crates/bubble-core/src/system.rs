@@ -128,6 +128,118 @@ impl BubblePaths {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SystemStatusData {
+    current_generation: String,
+    previous_generation: String,
+    boot_generation: String,
+    root_filesystem: String,
+    root_subvolume: String,
+    snapshots: String,
+    init: String,
+    architecture: String,
+    kernel: String,
+    ulpm_version: String,
+    lpk_format_version: String,
+}
+
+fn is_mountpoint(path: &Path) -> bool {
+    Command::new("mountpoint")
+        .arg("-q")
+        .arg("--")
+        .arg(path)
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn system_value(program: &str, arguments: &[&str]) -> String {
+    command_output(program, arguments)
+        .and_then(|output| output.lines().next().map(str::trim).map(str::to_owned))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "unknown".to_owned())
+}
+
+fn format_status(paths: &BubblePaths, data: &SystemStatusData) -> String {
+    format!(
+        "{name}\n\n\
+         Version:             {version}\n\
+         Status:              {channel}\n\
+         State directory:     {state_dir}\n\
+         Rootfs container:    {rootfs_mount}\n\
+         Current generation:  {current_generation}\n\
+         Previous generation: {previous_generation}\n\
+         Boot generation:     {boot_generation}\n\
+         Root filesystem:     {root_filesystem}\n\
+         Root subvolume:      {root_subvolume}\n\
+         Snapshots:           {snapshots_dir} ({snapshots})\n\
+         Init:                {init}\n\
+         Architecture:        {architecture}\n\
+         Kernel:              {kernel}\n\
+         ULPM Engine:         {ulpm_version}\n\
+         LPK Format:          {lpk_format_version}\n",
+        name = paths.name.to_string_lossy(),
+        version = paths.version.to_string_lossy(),
+        channel = paths.channel.to_string_lossy(),
+        state_dir = paths.state_dir.display(),
+        rootfs_mount = paths.rootfs_mount.display(),
+        current_generation = data.current_generation,
+        previous_generation = data.previous_generation,
+        boot_generation = data.boot_generation,
+        root_filesystem = data.root_filesystem,
+        root_subvolume = data.root_subvolume,
+        snapshots_dir = paths.snapshots_dir.display(),
+        snapshots = data.snapshots,
+        init = data.init,
+        architecture = data.architecture,
+        kernel = data.kernel,
+        ulpm_version = data.ulpm_version,
+        lpk_format_version = data.lpk_format_version,
+    )
+}
+
+/// Build the same status report as the legacy bubble_system_status function.
+pub fn status_report(paths: &BubblePaths) -> String {
+    let boot_generation = std::fs::read_to_string(paths.run_dir.join("current-generation"))
+        .map(|value| value.trim_end_matches('\n').to_owned())
+        .unwrap_or_else(|_| "not booted".to_owned());
+
+    let root_filesystem = root_filesystem_type();
+    let root_subvolume = root_subvolume();
+
+    let data = SystemStatusData {
+        current_generation: paths
+            .current_generation()
+            .unwrap_or_else(|| "none".to_owned()),
+        previous_generation: paths
+            .previous_generation()
+            .unwrap_or_else(|| "none".to_owned()),
+        boot_generation,
+        root_filesystem: if root_filesystem.is_empty() {
+            "unknown".to_owned()
+        } else {
+            root_filesystem
+        },
+        root_subvolume: if root_subvolume.is_empty() {
+            "unknown".to_owned()
+        } else {
+            root_subvolume
+        },
+        snapshots: if is_mountpoint(&paths.snapshots_dir) {
+            "mounted".to_owned()
+        } else {
+            "not mounted".to_owned()
+        },
+        init: system_init_label(),
+        architecture: system_value("uname", &["-m"]),
+        kernel: system_value("uname", &["-r"]),
+        ulpm_version: ulpm_version(paths).unwrap_or_else(|| "unknown".to_owned()),
+        lpk_format_version: lpk_format_version(paths).unwrap_or_else(|| "unknown".to_owned()),
+    };
+
+    format_status(paths, &data)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{parse_exported_value, parse_root_subvolume};
@@ -166,6 +278,46 @@ mod tests {
         .collect();
 
         BubblePaths::from_lookup(|key| values.get(key).cloned())
+    }
+
+    #[test]
+    fn status_report_preserves_the_legacy_field_order_and_labels() {
+        let paths = BubblePaths::from_lookup(|key| match key {
+            "BUBBLEOS_NAME" => Some(OsString::from("bubbleOS")),
+            "BUBBLEOS_VERSION" => Some(OsString::from("1.2.3")),
+            "BUBBLEOS_CHANNEL" => Some(OsString::from("stable")),
+            "BUBBLEOS_STATE_DIR" => Some(OsString::from("/state")),
+            "BUBBLEOS_ROOTFS_MOUNT" => Some(OsString::from("/rootfs")),
+            "BUBBLEOS_SNAPSHOTS_DIR" => Some(OsString::from("/snapshots")),
+            _ => None,
+        });
+        let data = super::SystemStatusData {
+            current_generation: "000123".to_owned(),
+            previous_generation: "000122".to_owned(),
+            boot_generation: "000123".to_owned(),
+            root_filesystem: "btrfs".to_owned(),
+            root_subvolume: "@rootfs/generations/000123".to_owned(),
+            snapshots: "mounted".to_owned(),
+            init: "systemd 257".to_owned(),
+            architecture: "x86_64".to_owned(),
+            kernel: "6.12.0".to_owned(),
+            ulpm_version: "5.3.0".to_owned(),
+            lpk_format_version: "2".to_owned(),
+        };
+
+        let report = super::format_status(&paths, &data);
+        assert!(report.starts_with("bubbleOS\n\nVersion:             1.2.3\n"));
+        assert!(report.contains("Current generation:  000123\n"));
+        assert!(report.contains("Snapshots:           /snapshots (mounted)\n"));
+        assert!(report.ends_with("LPK Format:          2\n"));
+        assert!(
+            report.find("Current generation:").unwrap()
+                < report.find("Previous generation:").unwrap()
+        );
+        assert!(
+            report.find("ULPM Engine:").unwrap()
+                < report.find("LPK Format:").unwrap()
+        );
     }
 
     #[test]
