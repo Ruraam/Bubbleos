@@ -2,7 +2,7 @@
 
 use crate::BubblePaths;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn is_generation_number(value: &str) -> bool {
     value.len() == 6 && value.bytes().all(|byte| byte.is_ascii_digit())
