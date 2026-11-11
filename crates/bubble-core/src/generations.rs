@@ -414,10 +414,20 @@ mod tests {
     }
 
     fn paths_for_test(root: &Path) -> BubblePaths {
-        let values: HashMap<String, OsString> = [(
-            "BUBBLEOS_GENERATIONS_DIR".to_owned(),
-            root.join("generations").into_os_string(),
-        )]
+        let values: HashMap<String, OsString> = [
+            (
+                "BUBBLEOS_GENERATIONS_DIR".to_owned(),
+                root.join("generations").into_os_string(),
+            ),
+            (
+                "BUBBLEOS_CURRENT_LINK".to_owned(),
+                root.join("current").into_os_string(),
+            ),
+            (
+                "BUBBLEOS_PREVIOUS_LINK".to_owned(),
+                root.join("previous").into_os_string(),
+            ),
+        ]
         .into_iter()
         .collect();
 
