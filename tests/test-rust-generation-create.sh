@@ -64,6 +64,11 @@ grep -Fxq 'GENERATION=000124' "$metadata"
 grep -Fxq 'DESCRIPTION=integration test second line' "$metadata"
 grep -Eq '^CREATED_AT=[0-9]{4}-[0-9]{2}-[0-9]{2}T' "$metadata"
 
+# The Rust activation command atomically records the former and selected roots.
+"$BINARY" generation-switch-links 000124 000123
+[[ "$(readlink "$ROOTFS/previous")" == "generations/000123" ]]
+[[ "$(readlink "$ROOTFS/current")" == "generations/000124" ]]
+
 # A source generation with a symlinked /etc must not redirect metadata writes.
 rm -rf -- "$GENERATIONS/000124/etc"
 ln -s "$OUTSIDE" "$GENERATIONS/000124/etc"
