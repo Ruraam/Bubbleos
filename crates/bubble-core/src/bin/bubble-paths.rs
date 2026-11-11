@@ -10,7 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|status>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|status>";
 
 fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
     let paths = BubblePaths::from_env();
@@ -111,6 +111,15 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
                 std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     "previous generation is unavailable",
+                )
+            })?
+        ),
+        "generation-running" => println!(
+            "{}",
+            bubble_core::generations::running_generation().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "running generation is unavailable",
                 )
             })?
         ),
