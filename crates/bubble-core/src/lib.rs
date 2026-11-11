@@ -179,18 +179,18 @@ impl BubblePaths {
     }
 
     /// Directories created by the legacy bubble_init_paths function.
-    pub fn initialization_directories(&self) -> Vec<&Path> {
+    pub fn initialization_directories(&self) -> Vec<PathBuf> {
         vec![
-            &self.state_dir,
-            &self.rootfs_mount,
-            &self.state_dir.join("transactions"),
-            &self.store_dir,
-            &self.ulpm_config_dir,
-            &self.state_dir.join("wal"),
-            &self.config_dir,
-            &self.cache_dir,
-            &self.ulpm_cache_dir,
-            &self.run_dir,
+            self.state_dir.clone(),
+            self.rootfs_mount.clone(),
+            self.state_dir.join("transactions"),
+            self.store_dir.clone(),
+            self.ulpm_config_dir.clone(),
+            self.state_dir.join("wal"),
+            self.config_dir.clone(),
+            self.cache_dir.clone(),
+            self.ulpm_cache_dir.clone(),
+            self.run_dir.clone(),
         ]
     }
 
@@ -200,7 +200,7 @@ impl BubblePaths {
     /// the caller; this function never silently ignores a failed mkdir.
     pub fn initialize(&self) -> io::Result<()> {
         for directory in self.initialization_directories() {
-            std::fs::create_dir_all(directory)?;
+            std::fs::create_dir_all(&directory)?;
         }
         Ok(())
     }
