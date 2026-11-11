@@ -10,7 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|generation-create <from-or-empty> <description>|generation-switch-links <target> <expected-current>|generation-write-metadata <number> <description>|store-object-dir <digest>|store-object-manifest <digest>|store-latest-version <id>|store-info-id <selector>|store-info-file <path>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|arch|version-compare <left> <right>|version-matches <version> <constraint>|bootloader-root-uuid|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|generation-create <from-or-empty> <description>|generation-switch-links <target> <expected-current>|generation-write-metadata <number> <description>|store-object-dir <digest>|store-object-manifest <digest>|store-latest-version <id>|store-info-id <selector>|store-info-file <path>|snapshot-valid-name <name>|snapshot-create-generation <number> <label>|snapshot-create-var <label>|snapshot-schedule-restore <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|arch|version-compare <left> <right>|version-matches <version> <constraint>|bootloader-root-uuid|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
 
 fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     let argument = arguments.first().map(OsString::as_os_str);
@@ -182,6 +182,37 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
         .into());
     }
 
+    if command == "snapshot-create-generation" {
+        let values = arguments.iter().map(|value| value.to_str())
+            .collect::<Option<Vec<_>>>().ok_or_else(|| std::io::Error::new(
+                std::io::ErrorKind::InvalidInput, "snapshot arguments must be valid UTF-8"
+            ))?;
+        require_root()?;
+        paths.require_snapshots_layout()?;
+        println!("{}", paths.snapshot_create_generation(values[0], values[1])?.display());
+        return Ok(());
+    }
+
+    if command == "snapshot-create-var" {
+        let label = argument.and_then(OsStr::to_str).ok_or_else(|| std::io::Error::new(
+            std::io::ErrorKind::InvalidInput, "snapshot-create-var requires a label"
+        ))?;
+        require_root()?;
+        paths.require_snapshots_layout()?;
+        println!("{}", paths.snapshot_create_var(label)?.display());
+        return Ok(());
+    }
+
+    if command == "snapshot-schedule-restore" {
+        let name = argument.and_then(OsStr::to_str).ok_or_else(|| std::io::Error::new(
+            std::io::ErrorKind::InvalidInput, "snapshot-schedule-restore requires a snapshot name"
+        ))?;
+        require_root()?;
+        paths.require_snapshots_layout()?;
+        println!("{}", paths.snapshot_schedule_restore(name)?);
+        return Ok(());
+    }
+
     if command == "snapshot-valid-name" {
         let name = argument.and_then(OsStr::to_str).ok_or_else(|| {
             std::io::Error::new(
@@ -347,8 +378,9 @@ fn main() {
     let arguments: Vec<OsString> = args.collect();
 
     let expected_arguments = match command.as_str() {
-        "generation-exists" | "snapshot-valid-name" | "snapshot-pending-from-file" => 1,
-        "generation-create" => 2,
+        "generation-exists" | "snapshot-valid-name" | "snapshot-pending-from-file"
+        | "snapshot-create-var" | "snapshot-schedule-restore" => 1,
+        "generation-create" | "snapshot-create-generation" => 2,
         "generation-switch-links" => 2,
         "generation-write-metadata" => 2,
         "store-object-dir"

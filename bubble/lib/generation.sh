@@ -237,6 +237,10 @@ bubble_var_restore_schedule() {
         return 2
     fi
     name="${name#var/}"
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-schedule-restore "$name"
+        return $?
+    fi
     if ! bubble_snapshot_valid_name "$name"; then
         printf 'bubble: invalid snapshot name: %s\n' "$name" >&2
         return 2
@@ -399,6 +403,10 @@ bubble_var_restore_apply() {
 
 bubble_snapshot_generation() {
     local gen="$1" label="$2" base dest
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-create-generation "$gen" "$label"
+        return $?
+    fi
     base="$(date -u +%Y%m%dT%H%M%SZ)-${gen}-${label}"
     install -d -m 0755 "$BUBBLEOS_SNAPSHOTS_DIR/rootfs"
     dest="$(bubble_snapshot_destination "$BUBBLEOS_SNAPSHOTS_DIR/rootfs" "$base")"
@@ -408,6 +416,10 @@ bubble_snapshot_generation() {
 
 bubble_snapshot_var() {
     local label="$1" base dest
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-create-var "$label"
+        return $?
+    fi
     mountpoint -q /var || {
         printf 'bubble: /var is not a mount point; cannot snapshot it\n' >&2
         return 1

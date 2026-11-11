@@ -109,6 +109,10 @@ jobs:
         if: steps.rust-workspace.outputs.present == 'true'
         run: bash tests/test-rust-store-parity.sh target/debug/bubble-paths
 
+      - name: Verify Rust snapshot operations
+        if: steps.rust-workspace.outputs.present == 'true'
+        run: sudo bash tests/test-rust-snapshot-ops.sh target/debug/bubble-paths
+
       - name: Verify Limine renderer shell parity
         if: steps.rust-workspace.outputs.present == 'true'
         run: bash tests/test-limine-render-parity.sh
@@ -137,6 +141,7 @@ jobs:
           cargo build --offline --locked --release --workspace --all-targets --all-features
           bash tests/test-rust-repo-parity.sh target/release/bubble-paths
           bash tests/test-rust-store-parity.sh target/release/bubble-paths
+          bash tests/test-rust-snapshot-ops.sh target/release/bubble-paths
           bash tests/test-rust-generation-create.sh target/release/bubble-paths
           cargo test --offline --locked --workspace --all-features
           bash tests/test-limine-render-parity.sh target/release/bubble-paths
