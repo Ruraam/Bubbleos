@@ -339,7 +339,7 @@ mod tests {
         let root = temp_root();
         write_generation(&root, "000010", "Current kernel");
         write_generation(&root, "000009", "Shared kernel");
-        write_generation(&root, "000002", "Old/system\nrevision");
+        write_generation(&root, "000002", "Old/system\rrevision");
         write_generation(&root, ".hidden", "hidden");
         write_generation(&root, "invalid", "invalid");
 
