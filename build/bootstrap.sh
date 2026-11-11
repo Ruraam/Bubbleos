@@ -27,9 +27,25 @@ source "$CONFIG"
 # the initial userspace. They are never written to the target configuration.
 SUITE="${SUITE:-stable}"
 MIRROR="${MIRROR:-https://deb.debian.org/debian}"
+# NVK only recognises Pascal (GP107) starting with Mesa 25.1, while Debian 13
+# ships Mesa 25.0.  Pull just the Vulkan drivers from the matching backports
+# suite; the GL/EGL stack stays on the stable suite.  Set to "none" to skip.
+MESA_VULKAN_SUITE="${MESA_VULKAN_SUITE:-auto}"
 KEEP_APT="${KEEP_APT:-0}"
 SYSTEMD="${SYSTEMD:-1}"
 ROOT_PASSWORD="${ROOT_PASSWORD:-bubble}"
+# Desktop integration ---------------------------------------------------------
+# DESKTOP=1 installs the Wayfire session, graphical greeter and companion
+# applications, creates a normal desktop user, and boots to graphical.target.
+# Set DESKTOP=0 for the previous console-only image.
+DESKTOP="${DESKTOP:-1}"
+DESKTOP_USER="${DESKTOP_USER:-bubble}"
+DESKTOP_USER_PASSWORD="${DESKTOP_USER_PASSWORD:-bubble}"
+DESKTOP_USER_GROUPS="${DESKTOP_USER_GROUPS:-audio video input render lp plugdev sudo bluetooth}"
+DESKTOP_PACKAGES="${DESKTOP_PACKAGES:-wayfire wayfire-plugin-winshadows wstroke waybar fuzzel mako-notifier swaybg foot swaylock swayidle greetd tuigreet xdg-desktop-portal xdg-desktop-portal-wlr xdg-utils xwayland network-manager wpasupplicant wireless-regdb polkitd pkexec sudo bluez dbus-user-session libspdlog1.15 rfkill pipewire-audio pipewire-pulse wireplumber libspa-0.2-bluetooth pavucontrol fonts-inter fonts-jetbrains-mono fonts-noto-color-emoji fonts-font-awesome hicolor-icon-theme papirus-icon-theme bibata-cursor-theme gnome-themes-extra adwaita-icon-theme libgl1-mesa-dri mesa-utils mesa-vulkan-drivers vulkan-tools desktop-file-utils shared-mime-info xdg-user-dirs brightnessctl playerctl libnotify-bin wl-clipboard grim slurp wcm wlopm wlr-randr kanshi upower lxpolkit nm-connection-editor usbutils pciutils evtest joystick libsdl2-2.0-0 libsdl3-0 libsdl2-tests}"
+# bubble-settings is a native GTK3 control center built inside the target
+# chroot before APT is removed. BUILD_SETTINGS follows DESKTOP by default.
+BUILD_SETTINGS="${BUILD_SETTINGS:-$DESKTOP}"
 KERNEL_ENV="${KERNEL_ENV:-$BUILD_DIR/kernel/kernel.env}"
 if [[ -r "$KERNEL_ENV" ]]; then
     # shellcheck disable=SC1090
@@ -39,7 +55,7 @@ KERNEL_RELEASE="${KERNEL_RELEASE:-$(uname -r)}"
 KERNEL_MODULE_DIR="${KERNEL_MODULE_DIR:-${MODULE_DIR:-$BUILD_DIR/kernel/root/usr/lib/modules/$KERNEL_RELEASE}}"
 FIRMWARE_DIR="${FIRMWARE_DIR:-$ROOT/../firmware}"
 HARDWARE_USERSPACE="${HARDWARE_USERSPACE:-1}"
-HARDWARE_PACKAGES="${HARDWARE_PACKAGES:-bolt libdrm-amdgpu1 libdrm-intel1 libdrm-nouveau2 libtypec0 libusb3380-0t64 libwacom intel-media-va-driver}"
+HARDWARE_PACKAGES="${HARDWARE_PACKAGES:-bolt libdrm-amdgpu1 libdrm-intel1 libdrm-nouveau2 libtypec0 libusb3380-0t64 libwacom9 libwacom-common libva2 intel-media-va-driver}"
 # ULPM runtime and LPK packaging tools (engine modules are installed from the
 # vendored ulpm/ tree below). Kept as a variable so a leaner image can override
 # the list at build time.
@@ -52,6 +68,15 @@ need() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || die "Run this build step as root (or via sudo)."
 [[ "$SYSTEMD" == "0" || "$SYSTEMD" == "1" ]] || die "SYSTEMD must be 0 or 1"
 [[ "$SYSTEMD" == "0" || -n "$ROOT_PASSWORD" ]] || die "ROOT_PASSWORD must not be empty"
+[[ "$DESKTOP" == "0" || "$DESKTOP" == "1" ]] || die "DESKTOP must be 0 or 1"
+[[ "$BUILD_SETTINGS" == "0" || "$BUILD_SETTINGS" == "1" ]] ||
+    die "BUILD_SETTINGS must be 0 or 1"
+[[ "$BUILD_SETTINGS" == "0" || "$DESKTOP" == "1" ]] ||
+    die "BUILD_SETTINGS=1 requires DESKTOP=1"
+[[ "$HARDWARE_USERSPACE" == "0" || "$HARDWARE_USERSPACE" == "1" ]] ||
+    die "HARDWARE_USERSPACE must be 0 or 1"
+[[ "$DESKTOP" == "0" || "$SYSTEMD" == "1" ]] ||
+    die "DESKTOP=1 requires SYSTEMD=1"
 if [[ "$SYSTEMD" == "1" ]]; then
     INIT_NAME="systemd"
 else
@@ -74,13 +99,27 @@ fi
 log "Bootstrapping base userspace (build-time only)"
 log "Suite=$SUITE Arch=$ARCH Init=$INIT_NAME"
 bootstrap_args=(--arch="$ARCH" --variant=minbase)
-include_pkgs=(btrfs-progs)
+# htop is the lightweight task manager for the serial console and tty1, so it
+# is part of the base system and stays available with DESKTOP=0.
+include_pkgs=(btrfs-progs htop)
 if [[ "$SYSTEMD" == "1" ]]; then
     # One debootstrap argument: a comma-separated package list.
     include_pkgs+=(systemd-sysv udev kmod dbus libpam-systemd)
 fi
 read -r -a ulpm_pkgs <<< "$ULPM_PACKAGES"
 include_pkgs+=("${ulpm_pkgs[@]}")
+if [[ "$HARDWARE_USERSPACE" == "1" ]]; then
+    # Hardware userspace (Thunderbolt, DRM, Wacom, VA-API) comes from the
+    # target suite.  Copying it from the external firmware drop is unsafe:
+    # that drop is extracted from a newer Debian and would replace the
+    # suite's glib/systemd/drm libraries with ABI-incompatible builds.
+    read -r -a hardware_pkgs <<< "$HARDWARE_PACKAGES"
+    include_pkgs+=("${hardware_pkgs[@]}")
+fi
+if [[ "$DESKTOP" == "1" ]]; then
+    read -r -a desktop_pkgs <<< "$DESKTOP_PACKAGES"
+    include_pkgs+=("${desktop_pkgs[@]}")
+fi
 bootstrap_args+=(--include="$(IFS=,; echo "${include_pkgs[*]}")")
 debootstrap "${bootstrap_args[@]}" "$SUITE" "$ROOTFS" "$MIRROR"
 
@@ -102,6 +141,52 @@ for fs in proc sys dev; do
     fi
 done
 
+# ------------------------------------------------------------------------------
+# Mesa Vulkan drivers (NVK)
+# ------------------------------------------------------------------------------
+# Debian 13 ships Mesa 25.0, whose NVK does not know about Pascal (GP107).
+# NVK gained Maxwell/Pascal/Volta support in Mesa 25.1, so install only
+# mesa-vulkan-drivers from trixie-backports and pin it there.  Dependencies
+# are satisfied by the stable suite, so the GL/EGL stack is not upgraded.
+if [[ "$MESA_VULKAN_SUITE" == "auto" ]]; then
+    case "$SUITE" in
+        stable|trixie)
+            debian_codename="$(chroot "$ROOTFS" sh -c \
+                '. /etc/os-release; printf %s "${VERSION_CODENAME:-}"')"
+            [[ -n "$debian_codename" ]] ||
+                die "cannot determine the Debian codename"
+            MESA_VULKAN_SUITE="${debian_codename}-backports"
+            ;;
+        *)
+            MESA_VULKAN_SUITE="none"
+            ;;
+    esac
+fi
+if [[ "$MESA_VULKAN_SUITE" != "none" ]]; then
+    log "Installing mesa-vulkan-drivers from $MESA_VULKAN_SUITE"
+    install -d -m 0755 \
+        "$ROOTFS/etc/apt/sources.list.d" \
+        "$ROOTFS/etc/apt/preferences.d"
+    printf 'deb %s %s main\n' "$MIRROR" "$MESA_VULKAN_SUITE" \
+        > "$ROOTFS/etc/apt/sources.list.d/bubbleos-backports.list"
+    cat > "$ROOTFS/etc/apt/preferences.d/bubbleos-mesa-vulkan" <<EOF
+Package: mesa-vulkan-drivers
+Pin: release l=Debian Backports
+Pin-Priority: 990
+EOF
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get update -qq
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y -qq --no-install-recommends mesa-vulkan-drivers
+    rm -f "$ROOTFS/etc/apt/sources.list.d/bubbleos-backports.list" \
+        "$ROOTFS/etc/apt/preferences.d/bubbleos-mesa-vulkan"
+    mesa_version="$(chroot "$ROOTFS" \
+        dpkg-query -W -f='${Version}' mesa-vulkan-drivers)"
+    chroot "$ROOTFS" dpkg --compare-versions "$mesa_version" ge "25.1" ||
+        die "Mesa $mesa_version is too old for NVK on Pascal (need >= 25.1)"
+    log "Mesa Vulkan drivers: $mesa_version"
+fi
+
 log "Creating bubbleOS filesystem layout"
 install -d -m 0755 \
     "$ROOTFS/var/lib/bubbleos/store" \
@@ -121,6 +206,13 @@ ln -sf /opt/bubbleos/bubble/bin/bubble "$ROOTFS/usr/local/bin/bubble"
 
 log "Installing bubbleOS configuration overlay"
 cp -a "$ROOT/rootfs/overlay/etc/." "$ROOTFS/etc/"
+cp -a "$ROOT/rootfs/overlay/usr/." "$ROOTFS/usr/"
+
+# Root uses the same themed htop defaults as users created from /etc/skel.
+if [[ -f "$ROOTFS/etc/skel/.config/htop/htoprc" ]]; then
+    install -D -m 0644 "$ROOTFS/etc/skel/.config/htop/htoprc" \
+        "$ROOTFS/root/.config/htop/htoprc"
+fi
 
 # The fstab template carries the RootFS and ESP UUIDs as placeholders so the
 # boot subvolume and bootloader mounts cannot drift from config/rootfs.env.
@@ -160,6 +252,92 @@ chmod 0644 \
 chown -R root:root "$ROOTFS/etc/dpkg/origins"
 chmod 0755 "$ROOTFS/etc/dpkg/origins"
 chmod 0644 "$ROOTFS/etc/dpkg/origins/bubbleos"
+
+# Desktop configuration, fonts and session files come from the same overlay.
+chown -R root:root \
+    "$ROOTFS/etc/bubbleos" \
+    "$ROOTFS/etc/environment.d" \
+    "$ROOTFS/etc/greetd" \
+    "$ROOTFS/etc/gtk-2.0" \
+    "$ROOTFS/etc/gtk-3.0" \
+    "$ROOTFS/etc/gtk-4.0" \
+    "$ROOTFS/etc/pam.d" \
+    "$ROOTFS/etc/swaylock" \
+    "$ROOTFS/etc/xdg" \
+    "$ROOTFS/usr/local/bin/bubble-desktop" \
+    "$ROOTFS/usr/share/backgrounds/bubbleos" \
+    "$ROOTFS/usr/share/bubbleos" \
+    "$ROOTFS/usr/share/fonts/truetype/orbitron" \
+    "$ROOTFS/usr/share/wayland-sessions" \
+    "$ROOTFS/usr/lib/udev/rules.d/60-uinput.rules"
+chmod 0755 "$ROOTFS/usr/local/bin/bubble-desktop"
+chmod -R go-w \
+    "$ROOTFS/etc/bubbleos" \
+    "$ROOTFS/etc/environment.d" \
+    "$ROOTFS/etc/greetd" \
+    "$ROOTFS/etc/gtk-2.0" \
+    "$ROOTFS/etc/gtk-3.0" \
+    "$ROOTFS/etc/gtk-4.0" \
+    "$ROOTFS/etc/pam.d" \
+    "$ROOTFS/etc/swaylock" \
+    "$ROOTFS/etc/xdg" \
+    "$ROOTFS/usr/share/bubbleos" \
+    "$ROOTFS/usr/share/fonts/truetype/orbitron" \
+    "$ROOTFS/usr/lib/udev/rules.d/60-uinput.rules"
+find "$ROOTFS/usr/share/backgrounds/bubbleos" -type f -exec chmod 0644 {} +
+find "$ROOTFS/usr/share/bubbleos" -type f -exec chmod 0644 {} +
+find "$ROOTFS/usr/share/fonts/truetype/orbitron" -type f -exec chmod 0644 {} +
+find "$ROOTFS/usr/share/wayland-sessions" -type f -exec chmod 0644 {} +
+
+# ------------------------------------------------------------------------------
+# bubble-settings (native GTK3 control center)
+# ------------------------------------------------------------------------------
+# The target has no compiler and APT is removed at the end of this script, so
+# the control center is built inside the target chroot with a temporary
+# toolchain. Mark every pre-existing package manual first: autoremove can then
+# remove only the build dependencies without touching the runtime userspace.
+if [[ "$BUILD_SETTINGS" == "1" ]]; then
+    log "Building bubble-settings in the target RootFS"
+    settings_src="$ROOTFS/usr/src/bubbleos/settings"
+    install -d -m 0755 "$settings_src"
+    cp -a "$ROOT/settings/." "$settings_src/"
+    # Never reuse host-built objects: the host glibc/GTK are newer than the
+    # target suite and would produce binaries that cannot start in the image.
+    rm -f "$settings_src"/bubble-settings \
+        "$settings_src"/bubble-settings-helper "$settings_src"/*.o
+    chown -R root:root "$settings_src"
+
+    chroot "$ROOTFS" sh -c \
+        'apt-mark showauto 2>/dev/null | xargs -r apt-mark manual >/dev/null 2>&1 || true'
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get update -qq
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y -qq --no-install-recommends \
+        gcc make libc6-dev libgtk-3-dev pkg-config
+    chroot "$ROOTFS" make -C /usr/src/bubbleos/settings
+    chroot "$ROOTFS" make -C /usr/src/bubbleos/settings install
+    chroot "$ROOTFS" gtk-update-icon-cache -f -t /usr/share/icons/hicolor \
+        >/dev/null 2>&1 || true
+    chroot "$ROOTFS" update-desktop-database /usr/share/applications \
+        >/dev/null 2>&1 || true
+    rm -rf "$settings_src"
+
+    chroot "$ROOTFS" test -x /usr/bin/bubble-settings ||
+        die "bubble-settings was not installed"
+    chroot "$ROOTFS" test -x /usr/libexec/bubbleos/bubble-settings-helper ||
+        die "bubble-settings-helper was not installed"
+
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get purge -y -qq gcc make libc6-dev libgtk-3-dev pkg-config
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get autoremove -y -qq --purge
+    chroot "$ROOTFS" ldconfig >/dev/null 2>&1 || true
+
+    if chroot "$ROOTFS" sh -c 'command -v gcc >/dev/null 2>&1'; then
+        die "the C toolchain is still present in the target RootFS"
+    fi
+    log "bubble-settings installed"
+fi
 
 log "Installing ULPM tree (development integration)"
 cp -a "$ROOT/ulpm" "$ROOTFS/opt/bubbleos/ulpm"
@@ -201,13 +379,85 @@ CONF
 log "Initializing bubbleOS state template"
 chroot "$ROOTFS" /usr/local/bin/bubble bootstrap
 
+if [[ "$DESKTOP" == "1" ]]; then
+    log "Preparing desktop user and caches"
+    chroot "$ROOTFS" systemd-sysusers >/dev/null 2>&1 ||
+        log "WARNING: systemd-sysusers failed"
+    chroot "$ROOTFS" systemd-tmpfiles --create >/dev/null 2>&1 ||
+        log "WARNING: systemd-tmpfiles failed"
+
+    if [[ -n "$DESKTOP_USER" && "$DESKTOP_USER" != "root" ]]; then
+        if chroot "$ROOTFS" id -u "$DESKTOP_USER" >/dev/null 2>&1; then
+            log "Desktop user $DESKTOP_USER already exists"
+        else
+            desktop_groups=()
+            for group in $DESKTOP_USER_GROUPS; do
+                if chroot "$ROOTFS" getent group "$group" >/dev/null 2>&1; then
+                    desktop_groups+=("$group")
+                fi
+            done
+            group_list=""
+            if (( ${#desktop_groups[@]} > 0 )); then
+                group_list="$(IFS=,; echo "${desktop_groups[*]}")"
+            fi
+            if [[ -n "$group_list" ]]; then
+                chroot "$ROOTFS" useradd -m -s /bin/bash \
+                    -G "$group_list" "$DESKTOP_USER"
+            else
+                chroot "$ROOTFS" useradd -m -s /bin/bash "$DESKTOP_USER"
+            fi
+            if [[ -n "$DESKTOP_USER_PASSWORD" ]]; then
+                printf '%s:%s\n' "$DESKTOP_USER" "$DESKTOP_USER_PASSWORD" |
+                    chroot "$ROOTFS" chpasswd
+            fi
+            log "Created desktop user $DESKTOP_USER"
+        fi
+        chroot "$ROOTFS" id -u "$DESKTOP_USER" >/dev/null 2>&1 ||
+            die "desktop user $DESKTOP_USER was not created"
+
+        # Refresh the themed htop defaults when the user already existed and
+        # has no configuration of their own yet.  Create the config
+        # directories explicitly: install -D creates leading directories as
+        # root, which would block the user session from chmod'ing ~/.config.
+        desktop_config="$ROOTFS/home/$DESKTOP_USER/.config"
+        if [[ -f "$ROOTFS/etc/skel/.config/htop/htoprc" &&
+            ! -e "$desktop_config/htop/htoprc" ]]; then
+            install -d -m 0755 "$desktop_config" "$desktop_config/htop"
+            chown "$DESKTOP_USER:$DESKTOP_USER" "$desktop_config" \
+                "$desktop_config/htop"
+            chmod 0700 "$desktop_config"
+            install -m 0644 -o "$DESKTOP_USER" -g "$DESKTOP_USER" \
+                "$ROOTFS/etc/skel/.config/htop/htoprc" \
+                "$desktop_config/htop/htoprc"
+        fi
+    fi
+
+    # greetd runs the greeter as _greetd.  systemd-sysusers created it above;
+    # fail the build instead of producing an image with a broken login screen.
+    chroot "$ROOTFS" id -u _greetd >/dev/null 2>&1 ||
+        die "greetd user _greetd is missing"
+
+    chroot "$ROOTFS" fc-cache -f >/dev/null 2>&1 ||
+        log "WARNING: fc-cache failed"
+fi
+
 if [[ "$SYSTEMD" == "1" ]]; then
     log "Enabling systemd services"
     chroot "$ROOTFS" systemctl enable bubbleos-boot.service
     chroot "$ROOTFS" systemctl enable bubbleos-var-restore.service
     chroot "$ROOTFS" systemctl enable getty@tty1.service
     chroot "$ROOTFS" systemctl enable serial-getty@ttyS0.service
-    chroot "$ROOTFS" systemctl set-default multi-user.target
+
+    if [[ "$DESKTOP" == "1" ]]; then
+        chroot "$ROOTFS" systemctl enable NetworkManager.service
+        chroot "$ROOTFS" systemctl enable bluetooth.service
+        chroot "$ROOTFS" systemctl enable greetd.service
+        chroot "$ROOTFS" systemctl --global enable \
+            pipewire.socket pipewire-pulse.socket wireplumber.service
+        chroot "$ROOTFS" systemctl set-default graphical.target
+    else
+        chroot "$ROOTFS" systemctl set-default multi-user.target
+    fi
 
     log "Setting development root password"
     printf 'root:%s\n' "$ROOT_PASSWORD" | chroot "$ROOTFS" chpasswd
@@ -222,7 +472,7 @@ fi
 # ------------------------------------------------------------------------------
 # Kernel modules
 # ------------------------------------------------------------------------------
-# Install the complete module tree, not only autofs4: the supplied 7.3.1 kernel
+# Install the complete module tree, not only autofs4: the supplied 7.2.15 kernel
 # keeps storage and virtio support built in, but graphics, Wi-Fi, audio and
 # other hardware drivers remain loadable modules. depmod builds the binary
 # indexes used by libkmod/systemd, including modules.builtin.bin so built-in
@@ -451,31 +701,34 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# Hardware userspace payloads
+# Hardware userspace
 # ------------------------------------------------------------------------------
-# The same drop also contains the userspace pieces that consume those firmware
-# files: DRM/VA-API libraries, libwacom data, Thunderbolt and USB Type-C
-# helpers. They are merged without replacing files already provided by the
-# bootstrap packages (cp -n), so base libraries keep their packaged versions.
-if [[ "$HARDWARE_USERSPACE" == "1" && -d "$FIRMWARE_DIR" ]]; then
-    log "Installing hardware userspace payloads"
+# HARDWARE_PACKAGES are part of the debootstrap transaction above, so their
+# libraries, data files and maintainer scripts are installed by dpkg from the
+# target suite.  The external firmware drop is only used for /usr/lib/firmware:
+# never copy its /usr/lib binaries, because it can be extracted from a newer
+# Debian and would shadow the suite's glib/systemd/drm libraries.
+if [[ "$HARDWARE_USERSPACE" == "1" ]]; then
+    missing_hardware=()
     for package in $HARDWARE_PACKAGES; do
-        source_usr="$FIRMWARE_DIR/$package/usr"
-        if [[ ! -d "$source_usr" ]]; then
-            log "  skipping $package (not found)"
-            continue
+        if ! chroot "$ROOTFS" dpkg -s "$package" >/dev/null 2>&1; then
+            missing_hardware+=("$package")
         fi
-        log "  installing $package"
-        cp -a -n --no-preserve=ownership --reflink=auto -- \
-            "$source_usr/." "$ROOTFS/usr/"
     done
-    # The merge must not bring package documentation back into the target.
-    rm -rf "$ROOTFS/usr/share/doc" "$ROOTFS/usr/share/man" \
-        "$ROOTFS/usr/share/lintian" "$ROOTFS/usr/share/bug" \
-        "$ROOTFS/usr/share/gcc" "$ROOTFS/usr/share/gdb"
-    install -d -m 0755 "$ROOTFS/usr/share/doc" "$ROOTFS/usr/share/bug"
-    chroot "$ROOTFS" ldconfig >/dev/null 2>&1 || true
+    if (( ${#missing_hardware[@]} > 0 )); then
+        die "hardware userspace packages were not installed: ${missing_hardware[*]}"
+    fi
+    log "Hardware userspace installed from the target suite"
 fi
+
+# ------------------------------------------------------------------------------
+# Runtime pruning
+# ------------------------------------------------------------------------------
+# Drop the unused theme variants, translations and documentation payloads that
+# Debian installs by default.  build-image.sh runs the same idempotent step so
+# images built from an existing RootFS stay lean.
+log "Pruning unused runtime data"
+"$ROOT/build/prune-rootfs.sh" "$ROOTFS"
 
 log "RootFS created successfully"
 printf '\nRootFS: %s\n' "$ROOTFS"

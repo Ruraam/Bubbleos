@@ -2,9 +2,10 @@
 # ==============================================================================
 # bubbleOS - bootable disk image builder (Phase 1.3, step 3)
 # ==============================================================================
-# Assembles a GPT disk with:
-#   partition 1: FAT32 EFI System Partition (Limine + kernel + initramfs)
-#   partition 2: Btrfs bubbleOS RootFS (@rootfs generation container)
+# Assembles a GPT disk that boots both UEFI and legacy BIOS:
+#   partition 1: BIOS boot partition (Limine BIOS stage 2)
+#   partition 2: FAT32 EFI System Partition (Limine + kernel + initramfs)
+#   partition 3: Btrfs bubbleOS RootFS (@rootfs generation container)
 # ==============================================================================
 set -Eeuo pipefail
 export PATH="/usr/sbin:/sbin:${PATH}"
@@ -17,6 +18,8 @@ ESP_SIZE="${ESP_SIZE:-128M}"
 KERNEL_IMAGE="${KERNEL_IMAGE:-$ROOT/out/kernel/vmlinuz}"
 INITRAMFS="${INITRAMFS:-$ROOT/out/initramfs.cpio.gz}"
 LIMINE_BOOTX64="${LIMINE_BOOTX64:-$ROOT/out/tools/limine-binary/BOOTX64.EFI}"
+LIMINE_BIOS_SYS="${LIMINE_BIOS_SYS:-$ROOT/out/tools/limine-binary/limine-bios.sys}"
+LIMINE_TOOL="${LIMINE_TOOL:-$ROOT/out/tools/limine-binary/limine}"
 LIMINE_CONFIG="${LIMINE_CONFIG:-$ROOT/boot/limine.conf}"
 CONFIG="${CONFIG:-$ROOT/config/rootfs.env}"
 RENDERED_CONFIG="${RENDERED_CONFIG:-$ROOT/out/limine.conf}"
@@ -25,18 +28,36 @@ BUBBLE_LIB="${BUBBLE_LIB:-$ROOT/bubble/lib}"
 # shellcheck disable=SC1091
 source "$BUBBLE_LIB/bootloader.sh"
 
-ESP_OFFSET_BYTES=$((1024 * 1024))
 SECTOR_SIZE=512
+BIOS_SIZE="${BIOS_SIZE:-1M}"
+BIOS_OFFSET_BYTES=$((1024 * 1024))
+ESP_OFFSET_BYTES=$((BIOS_OFFSET_BYTES + $(numfmt --from=iec "$BIOS_SIZE")))
 
 log() { printf '[bubbleOS] %s\n' "$*"; }
 die() { printf '[bubbleOS] ERROR: %s\n' "$*" >&2; exit 1; }
 
-for file in "$ROOT_IMAGE" "$KERNEL_IMAGE" "$INITRAMFS" "$LIMINE_BOOTX64" "$LIMINE_CONFIG" "$CONFIG"; do
+for file in "$ROOT_IMAGE" "$KERNEL_IMAGE" "$INITRAMFS" "$LIMINE_BOOTX64" \
+    "$LIMINE_BIOS_SYS" "$LIMINE_CONFIG" "$CONFIG"; do
     [[ -r "$file" ]] || die "Missing file: $file"
 done
-for command in sfdisk mkfs.vfat mmd mcopy truncate dd blkid; do
+for command in sfdisk mkfs.vfat mmd mcopy truncate dd blkid numfmt; do
     command -v "$command" >/dev/null 2>&1 || die "Missing required command: $command"
 done
+
+# The release tarball ships the Limine host tool as source. Build it once so
+# the BIOS stages can be installed without a separate package.
+if [[ ! -x "$LIMINE_TOOL" ]]; then
+    limine_source="$(dirname -- "$LIMINE_TOOL")/limine.c"
+    [[ -r "$limine_source" ]] ||
+        die "Missing Limine host tool: $LIMINE_TOOL (and $limine_source)"
+    cc="${CC:-cc}"
+    command -v "$cc" >/dev/null 2>&1 ||
+        die "Missing required command: $cc (to build the Limine host tool)"
+    log "Building the Limine host tool"
+    "$cc" -O2 -std=c99 -D_FILE_OFFSET_BITS=64 \
+        "$limine_source" -o "$LIMINE_TOOL" ||
+        die "Failed to build the Limine host tool"
+fi
 
 # shellcheck disable=SC1090
 source "$CONFIG"
@@ -76,15 +97,22 @@ grep -q "root=UUID=${ROOTFS_UUID}" "$RENDERED_CONFIG" ||
 grep -q '^default_entry: 1$' "$RENDERED_CONFIG" ||
     die "Limine configuration has no default_entry"
 
+bios_bytes="$(numfmt --from=iec "$BIOS_SIZE")"
 esp_bytes="$(numfmt --from=iec "$ESP_SIZE")"
 root_bytes="$(stat -c %s "$ROOT_IMAGE")"
+bios_sectors=$((bios_bytes / SECTOR_SIZE))
 esp_sectors=$((esp_bytes / SECTOR_SIZE))
 root_sectors=$((root_bytes / SECTOR_SIZE))
-esp_start=$((ESP_OFFSET_BYTES / SECTOR_SIZE))
+bios_start=$((BIOS_OFFSET_BYTES / SECTOR_SIZE))
+esp_start=$((bios_start + bios_sectors))
 root_start=$((esp_start + esp_sectors))
 
-if (( esp_bytes % SECTOR_SIZE != 0 || root_bytes % SECTOR_SIZE != 0 )); then
-    die "ESP and RootFS sizes must be multiples of $SECTOR_SIZE bytes"
+if (( bios_bytes % SECTOR_SIZE != 0 || esp_bytes % SECTOR_SIZE != 0 ||
+    root_bytes % SECTOR_SIZE != 0 )); then
+    die "BIOS boot, ESP and RootFS sizes must be multiples of $SECTOR_SIZE bytes"
+fi
+if (( ESP_OFFSET_BYTES % (1024 * 1024) != 0 )); then
+    die "ESP offset must be 1 MiB aligned"
 fi
 
 log "Building EFI System Partition ($ESP_SIZE, UUID $ESP_UUID)"
@@ -96,6 +124,9 @@ esp_image_uuid="$(blkid -p -o value -s UUID "$ESP_IMAGE" 2>/dev/null || true)"
     die "ESP UUID '$esp_image_uuid' does not match config ($ESP_UUID)"
 mmd -i "$ESP_IMAGE" ::/EFI ::/EFI/BOOT
 mcopy -i "$ESP_IMAGE" "$LIMINE_BOOTX64" ::/EFI/BOOT/BOOTX64.EFI
+# The BIOS stage 2 looks for limine-bios.sys in the partition root, /boot,
+# /limine or /boot/limine. The ESP root is the partition root here.
+mcopy -i "$ESP_IMAGE" "$LIMINE_BIOS_SYS" ::/limine-bios.sys
 # Limine reads boot(): paths from the ESP root; the guest mounts the ESP at
 # /boot, so these files appear as /boot/vmlinuz and /boot/initramfs.cpio.gz.
 mcopy -i "$ESP_IMAGE" "$KERNEL_IMAGE" ::/vmlinuz
@@ -111,12 +142,19 @@ truncate -s "$disk_bytes" "$DISK_IMAGE"
 
 sfdisk --quiet "$DISK_IMAGE" <<EOF
 label: gpt
+start=$bios_start, size=$bios_sectors, type=21686148-6449-6E6F-744E-656564454649, name="bubbleOS BIOS boot"
 start=$esp_start, size=$esp_sectors, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="bubbleOS ESP"
 start=$root_start, size=$root_sectors, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, uuid=$ROOTFS_PARTUUID, name="bubbleOS Root"
 EOF
 
-dd if="$ESP_IMAGE" of="$DISK_IMAGE" bs=1M seek=1 conv=notrunc,sparse status=none
+dd if="$ESP_IMAGE" of="$DISK_IMAGE" bs=1M \
+    seek=$((ESP_OFFSET_BYTES / 1024 / 1024)) conv=notrunc,sparse status=none
 dd if="$ROOT_IMAGE" of="$DISK_IMAGE" bs="$SECTOR_SIZE" seek="$root_start" conv=notrunc,sparse status=none
+
+# Install the Limine BIOS stage 1 in the MBR and stage 2 in partition 1. The
+# protective MBR and the GPT entries are preserved, so UEFI boot is unchanged.
+log "Installing Limine BIOS stages (MBR + BIOS boot partition)"
+"$LIMINE_TOOL" bios-install "$DISK_IMAGE" 1
 
 log "Disk image created successfully"
 printf '\nDisk:   %s (%s, apparent size)\n' "$DISK_IMAGE" "$(du -h --apparent-size "$DISK_IMAGE" | cut -f1)"

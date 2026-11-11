@@ -3,7 +3,7 @@
 # bubbleOS - QEMU launcher (Phase 1.3)
 # ==============================================================================
 # Direct kernel boot (ROOT_IMAGE) or firmware boot of the full disk image
-# (DISK_IMAGE, UEFI/OVMF).
+# (DISK_IMAGE, UEFI/OVMF by default, legacy BIOS with UEFI=0).
 # ==============================================================================
 set -Eeuo pipefail
 
@@ -23,6 +23,10 @@ UEFI="${UEFI:-1}"
 MEMORY="${MEMORY:-2048}"
 CPUS="${CPUS:-2}"
 APPEND_EXTRA="${APPEND_EXTRA:-}"
+# nographic (default) keeps the serial console in the terminal, which is what
+# the automated suites expect.  Set QEMU_DISPLAY=gtk (or sdl) to open a window
+# on the host and reach the Wayfire session running on VT7.
+QEMU_DISPLAY="${QEMU_DISPLAY:-nographic}"
 
 die() { printf '[bubbleOS] ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -32,34 +36,60 @@ cmd=(
     qemu-system-x86_64
     -m "$MEMORY"
     -smp "$CPUS"
-    -nographic
     -no-reboot
+    # Expose a virtio GPU so Wayfire has a real DRM output (Virtual-1) for
+    # its GLES2 renderer and for screencopy; the serial console remains the
+    # primary interface.
+    -vga none
+    -device virtio-gpu-pci
 )
+
+if [[ "$QEMU_DISPLAY" == "nographic" ]]; then
+    cmd+=(-nographic)
+else
+    # Show the guest desktop in its own window while the kernel and systemd
+    # logs stay in this terminal.  virtio input gives the session a keyboard
+    # and an absolute pointer without relying on the PS/2 emulation.
+    cmd+=(
+        -display "$QEMU_DISPLAY"
+        -serial mon:stdio
+        -device virtio-keyboard-pci
+        -device virtio-tablet-pci
+    )
+fi
 
 if [[ -n "$DISK_IMAGE" ]]; then
     [[ -r "$DISK_IMAGE" ]] || die "Disk image not found: $DISK_IMAGE"
-    [[ "$UEFI" == "1" ]] || die "BIOS boot is not implemented yet; use UEFI=1"
+    [[ "$UEFI" == "0" || "$UEFI" == "1" ]] ||
+        die "UEFI must be 0 (legacy BIOS) or 1 (UEFI/OVMF)"
 
-    ovmf_code=""
-    ovmf_vars_src=""
-    for candidate in /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd; do
-        [[ -r "$candidate" ]] && { ovmf_code="$candidate"; break; }
-    done
-    for candidate in /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd; do
-        [[ -r "$candidate" ]] && { ovmf_vars_src="$candidate"; break; }
-    done
-    [[ -n "$ovmf_code" && -n "$ovmf_vars_src" ]] || die "OVMF firmware not found (install the ovmf package)"
+    cmd+=(-machine q35)
 
-    ovmf_vars="$ROOT/out/OVMF_VARS.fd"
-    [[ -f "$ovmf_vars" ]] || cp "$ovmf_vars_src" "$ovmf_vars"
+    if [[ "$UEFI" == "1" ]]; then
+        ovmf_code=""
+        ovmf_vars_src=""
+        for candidate in /usr/share/OVMF/OVMF_CODE_4M.fd /usr/share/OVMF/OVMF_CODE.fd; do
+            [[ -r "$candidate" ]] && { ovmf_code="$candidate"; break; }
+        done
+        for candidate in /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/OVMF/OVMF_VARS.fd; do
+            [[ -r "$candidate" ]] && { ovmf_vars_src="$candidate"; break; }
+        done
+        [[ -n "$ovmf_code" && -n "$ovmf_vars_src" ]] ||
+            die "OVMF firmware not found (install the ovmf package)"
 
-    cmd+=(
-        -machine q35
-        -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code"
-        -drive "if=pflash,format=raw,file=$ovmf_vars"
-        -drive "file=$DISK_IMAGE,format=raw,if=virtio"
-    )
-    printf '[bubbleOS] Firmware:  UEFI (%s)\n' "$(basename "$ovmf_code")"
+        ovmf_vars="$ROOT/out/OVMF_VARS.fd"
+        [[ -f "$ovmf_vars" ]] || cp "$ovmf_vars_src" "$ovmf_vars"
+
+        cmd+=(
+            -drive "if=pflash,format=raw,readonly=on,file=$ovmf_code"
+            -drive "if=pflash,format=raw,file=$ovmf_vars"
+        )
+        printf '[bubbleOS] Firmware:  UEFI (%s)\n' "$(basename "$ovmf_code")"
+    else
+        printf '[bubbleOS] Firmware:  legacy BIOS (SeaBIOS)\n'
+    fi
+
+    cmd+=(-drive "file=$DISK_IMAGE,format=raw,if=virtio")
     printf '[bubbleOS] Disk:      %s\n' "$DISK_IMAGE"
 else
     [[ -r "$KERNEL" ]] || die "Kernel not found: $KERNEL (set KERNEL=...)"

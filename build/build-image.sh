@@ -11,7 +11,7 @@
 #   @logs                        persistent logs
 #   @snapshots                   read-only restore points
 #
-# The image is exposed to QEMU as /dev/vda2 (UEFI) or /dev/vda (direct boot).
+# On the GPT disk the image is exposed as /dev/vda3; direct boot uses /dev/vda.
 # ==============================================================================
 set -Eeuo pipefail
 export PATH="/usr/sbin:/sbin:${PATH}"
@@ -19,7 +19,7 @@ export PATH="/usr/sbin:/sbin:${PATH}"
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOTFS="${ROOTFS:-$ROOT/out/rootfs}"
 IMAGE="${IMAGE:-$ROOT/out/bubbleos-root.img}"
-SIZE="${SIZE:-2G}"
+SIZE="${SIZE:-3G}"
 CONFIG="${CONFIG:-$ROOT/config/rootfs.env}"
 MOUNT_DIR="${MOUNT_DIR:-$ROOT/out/mnt-rootfs}"
 GENERATION="${GENERATION:-000001}"
@@ -58,6 +58,9 @@ if [[ -e "$IMAGE" ]]; then
     fi
     rm -f -- "$IMAGE"
 fi
+
+log "Pruning unused runtime data"
+"$ROOT/build/prune-rootfs.sh" "$ROOTFS"
 
 mkdir -p "$MOUNT_DIR"
 if mountpoint -q "$MOUNT_DIR"; then
