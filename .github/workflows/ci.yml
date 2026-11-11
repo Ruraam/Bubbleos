@@ -1,0 +1,104 @@
+name: BubbleOS CI
+
+on:
+  push:
+    branches:
+      - BubbleOS_rust
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bubbleos-rust-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-shell:
+    name: Shell syntax validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out BubbleOS_rust
+        uses: actions/checkout@v6
+
+      - name: Validate Bash scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' scripts < <(
+            find . -type f \( -name '*.sh' -o -path './bubble/bin/bubble' \) \
+              -not -path './.git/*' -print0
+          )
+          if (("${#scripts[@]}" == 0)); then
+            echo "No Bash scripts found."
+            exit 0
+          fi
+          for script in "${scripts[@]}"; do
+            echo "::group::bash -n ${script}"
+            bash -n "${script}"
+            echo "::endgroup::"
+          done
+
+  build-settings:
+    name: Build GTK settings application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out BubbleOS_rust
+        uses: actions/checkout@v6
+
+      - name: Install GTK3 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential pkg-config libgtk-3-dev
+
+      - name: Compile bubble-settings
+        working-directory: settings
+        run: make clean all
+
+      - name: Check generated binaries
+        working-directory: settings
+        run: |
+          test -x bubble-settings
+          test -x bubble-settings-helper
+
+  rust:
+    name: Rust checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out BubbleOS_rust
+        uses: actions/checkout@v6
+
+      - name: Detect Rust workspace
+        id: rust-workspace
+        shell: bash
+        run: |
+          if [[ -f Cargo.toml ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No Cargo.toml yet; Rust checks will activate when the workspace is added."
+          fi
+
+      - name: Install stable Rust toolchain
+        if: steps.rust-workspace.outputs.present == 'true'
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        if: steps.rust-workspace.outputs.present == 'true'
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        if: steps.rust-workspace.outputs.present == 'true'
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Build Rust workspace
+        if: steps.rust-workspace.outputs.present == 'true'
+        run: cargo build --workspace --all-targets --all-features
+
+      - name: Run Rust tests
+        if: steps.rust-workspace.outputs.present == 'true'
+        run: cargo test --workspace --all-features
