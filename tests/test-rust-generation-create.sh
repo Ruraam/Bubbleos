@@ -22,7 +22,7 @@ ROOTFS="$TMP_DIR/rootfs"
 GENERATIONS="$ROOTFS/generations"
 FAKE_BIN="$TMP_DIR/bin"
 OUTSIDE="$TMP_DIR/outside"
-mkdir -p "$GENERATIONS/000123/etc/bubbleos" "$FAKE_BIN" "$OUTSIDE"
+mkdir -p "$GENERATIONS/000122" "$GENERATIONS/000123/etc/bubbleos" "$FAKE_BIN" "$OUTSIDE"
 printf 'GENERATION=000123\n' > "$GENERATIONS/000123/etc/bubbleos/generation"
 ln -s "generations/000123" "$ROOTFS/current"
 
@@ -63,6 +63,11 @@ metadata="$GENERATIONS/000124/etc/bubbleos/generation"
 grep -Fxq 'GENERATION=000124' "$metadata"
 grep -Fxq 'DESCRIPTION=integration test second line' "$metadata"
 grep -Eq '^CREATED_AT=[0-9]{4}-[0-9]{2}-[0-9]{2}T' "$metadata"
+
+# The public CLI metadata command uses the same atomic writer.
+"$BINARY" generation-write-metadata 000122 "CLI metadata"
+grep -Fxq 'GENERATION=000122' "$GENERATIONS/000122/etc/bubbleos/generation"
+grep -Fxq 'DESCRIPTION=CLI metadata' "$GENERATIONS/000122/etc/bubbleos/generation"
 
 # The Rust activation command atomically records the former and selected roots.
 "$BINARY" generation-switch-links 000124 000123
