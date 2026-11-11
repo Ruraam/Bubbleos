@@ -50,14 +50,14 @@ impl BubblePaths {
             names.push(name.to_owned());
         }
 
-        names.sort_by(|left, right| {
-            match (left.parse::<u64>(), right.parse::<u64>()) {
+        names.sort_by(
+            |left, right| match (left.parse::<u64>(), right.parse::<u64>()) {
                 (Ok(left_number), Ok(right_number)) => {
                     left_number.cmp(&right_number).then_with(|| left.cmp(right))
                 }
                 _ => left.cmp(right),
-            }
-        });
+            },
+        );
 
         Ok(names)
     }
