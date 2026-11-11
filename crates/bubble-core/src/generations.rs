@@ -119,11 +119,17 @@ fn ensure_real_directory_or_missing(path: &Path) -> io::Result<()> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            format!("refusing to write generation metadata through symlink {}", path.display()),
+            format!(
+                "refusing to write generation metadata through symlink {}",
+                path.display()
+            ),
         )),
         Ok(metadata) if !metadata.is_dir() => Err(io::Error::new(
             io::ErrorKind::NotADirectory,
-            format!("generation metadata parent is not a directory: {}", path.display()),
+            format!(
+                "generation metadata parent is not a directory: {}",
+                path.display()
+            ),
         )),
         Ok(_) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -179,9 +185,8 @@ fn write_generation_metadata(
     } else {
         description.replace('\n', " ")
     };
-    let metadata = format!(
-        "GENERATION={generation}\nCREATED_AT={created_at}\nDESCRIPTION={description}\n"
-    );
+    let metadata =
+        format!("GENERATION={generation}\nCREATED_AT={created_at}\nDESCRIPTION={description}\n");
     let metadata_file = metadata_dir.join("generation");
     let sequence = METADATA_TEMP_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
     let temporary_file = metadata_dir.join(format!(
@@ -228,17 +233,10 @@ impl BubblePaths {
     /// The destination is selected with the same six-digit sequence as the
     /// legacy shell function. A failed metadata write leaves the new snapshot
     /// in place, matching the existing shell behavior.
-    pub fn generation_create(
-        &self,
-        from: Option<&str>,
-        description: &str,
-    ) -> io::Result<String> {
-        require_root().map_err(|error| {
-            io::Error::new(io::ErrorKind::PermissionDenied, error)
-        })?;
-        self.require_generation_layout().map_err(|error| {
-            io::Error::new(io::ErrorKind::NotFound, error)
-        })?;
+    pub fn generation_create(&self, from: Option<&str>, description: &str) -> io::Result<String> {
+        require_root().map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?;
+        self.require_generation_layout()
+            .map_err(|error| io::Error::new(io::ErrorKind::NotFound, error))?;
 
         let source_generation = match from.filter(|generation| !generation.is_empty()) {
             Some(generation) => generation.to_owned(),
@@ -325,22 +323,18 @@ mod tests {
 
         super::write_generation_metadata(&paths, "000123", "first line\nsecond line").unwrap();
 
-        let metadata = std::fs::read_to_string(
-            generations.join("000123/etc/bubbleos/generation")
-        )
-        .unwrap();
+        let metadata =
+            std::fs::read_to_string(generations.join("000123/etc/bubbleos/generation")).unwrap();
         assert!(metadata.starts_with("GENERATION=000123\nCREATED_AT="));
         assert!(metadata.contains("DESCRIPTION=first line second line\n"));
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::metadata(
-                generations.join("000123/etc/bubbleos/generation")
-            )
-            .unwrap()
-            .permissions()
-            .mode()
+            let permissions = std::fs::metadata(generations.join("000123/etc/bubbleos/generation"))
+                .unwrap()
+                .permissions()
+                .mode()
                 & 0o777;
             assert_eq!(permissions, 0o644);
         }
