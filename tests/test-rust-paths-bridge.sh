@@ -106,9 +106,6 @@ assert_rust_call generation-previous bubble_generation_previous
 assert_rust_call status bubble_system_status
 assert_rust_call generation-list bubble_generation_list
 assert_rust_call generation-next bubble_generation_next
-assert_rust_call 
-
-printf 'Rust path bridge: OK\n'
-generation-exists\n000123' bubble_generation_exists 000123
+assert_rust_call $'generation-exists\n000123' bubble_generation_exists 000123
 
 printf 'Rust path bridge: OK\n'
