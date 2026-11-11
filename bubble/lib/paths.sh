@@ -10,6 +10,7 @@
 : "${BUBBLEOS_RUN_DIR:=/run/bubbleos}"
 : "${BUBBLEOS_CHANNEL:=development}"
 : "${BUBBLEOS_ULPM_DIR:=/opt/bubbleos/ulpm}"
+: "${BUBBLEOS_RUST_PATHS_BIN:=/usr/lib/bubbleos/bin/bubble-paths}"
 : "${BUBBLEOS_ULPM_CONFIG_DIR:=${BUBBLEOS_STATE_DIR}/ulpm}"
 : "${BUBBLEOS_ULPM_CACHE_DIR:=${BUBBLEOS_CACHE_DIR}/ulpm}"
 : "${BUBBLEOS_ROOTFS_MOUNT:=${BUBBLEOS_STATE_DIR}/rootfs}"
@@ -23,6 +24,11 @@
 : "${BUBBLEOS_PREVIOUS_LINK:=${BUBBLEOS_ROOTFS_MOUNT}/previous}"
 
 bubble_require_root() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        "$BUBBLEOS_RUST_PATHS_BIN" require-root
+        return $?
+    fi
+
     if (( EUID != 0 )); then
         printf 'bubble: this operation requires root privileges\n' >&2
         return 1
@@ -30,6 +36,11 @@ bubble_require_root() {
 }
 
 bubble_require_generation_layout() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        "$BUBBLEOS_RUST_PATHS_BIN" require-generation
+        return $?
+    fi
+
     command -v btrfs >/dev/null 2>&1 || {
         printf 'bubble: the btrfs command is unavailable (install btrfs-progs)\n' >&2
         return 1
@@ -47,6 +58,11 @@ bubble_require_generation_layout() {
 }
 
 bubble_require_snapshots_layout() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        "$BUBBLEOS_RUST_PATHS_BIN" require-snapshots
+        return $?
+    fi
+
     mountpoint -q "$BUBBLEOS_SNAPSHOTS_DIR" || {
         printf 'bubble: %s is not mounted (is the @snapshots subvolume available?)\n' \
             "$BUBBLEOS_SNAPSHOTS_DIR" >&2
@@ -55,6 +71,11 @@ bubble_require_snapshots_layout() {
 }
 
 bubble_init_paths() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        "$BUBBLEOS_RUST_PATHS_BIN" init
+        return $?
+    fi
+
     mkdir -p \
         "$BUBBLEOS_STATE_DIR" \
         "$BUBBLEOS_ROOTFS_MOUNT" \
