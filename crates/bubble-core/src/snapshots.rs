@@ -27,14 +27,15 @@ impl BubblePaths {
     /// preserves a trailing CR so CRLF input does not silently pass validation
     /// when the shell implementation would reject it.
     pub fn snapshot_pending_from_file(&self, marker: &std::path::Path) -> Option<String> {
-        let contents = std::fs::read_to_string(marker).ok()?;
-        for complete_line in contents.split_inclusive('\n') {
-            let Some(line) = complete_line.strip_suffix('\n') else {
+        let contents = std::fs::read(marker).ok()?;
+        for complete_line in contents.split_inclusive(|byte| *byte == b'\n') {
+            let Some(line) = complete_line.strip_suffix(b"\n") else {
                 // Bash's "while read" loop does not process an unterminated
                 // final line because read returns failure at EOF.
                 continue;
             };
-            if let Some(name) = line.strip_prefix("SNAPSHOT=") {
+            if let Some(name) = line.strip_prefix(b"SNAPSHOT=") {
+                let name = std::str::from_utf8(name).ok()?;
                 return snapshot_valid_name(name).then(|| name.to_owned());
             }
         }
@@ -168,6 +169,22 @@ mod tests {
 
         let paths = paths_for_test(&root);
         assert_eq!(paths.snapshot_pending_from_file(&marker), None);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pending_marker_skips_non_utf8_unrelated_lines_like_bash() {
+        let root = temp_root();
+        std::fs::create_dir_all(&root).unwrap();
+        let marker = root.join("request");
+        std::fs::write(&marker, b"COMMENT=\\xff\\nSNAPSHOT=valid-name\\n").unwrap();
+
+        let paths = paths_for_test(&root);
+        assert_eq!(
+            paths.snapshot_pending_from_file(&marker),
+            Some("valid-name".to_owned())
+        );
 
         std::fs::remove_dir_all(root).unwrap();
     }
