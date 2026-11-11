@@ -112,6 +112,7 @@ assert_rust_call ulpm-version bubble_ulpm_version
 assert_rust_call lpk-format-version bubble_lpk_format_version
 assert_rust_call generation-current bubble_generation_current
 assert_rust_call generation-previous bubble_generation_previous
+assert_rust_call generation-running bubble_generation_running
 assert_rust_call status bubble_system_status
 assert_rust_call generation-list bubble_generation_list
 assert_rust_call generation-next bubble_generation_next
