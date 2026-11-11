@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>bubbleOS</vendor>
+  <vendor_url>https://github.com/Ruraam/bubbleOS</vendor_url>
+
+  <action id="org.bubbleos.settings.users">
+    <description>Manage local user accounts</description>
+    <description xml:lang="fr">Gérer les comptes utilisateurs locaux</description>
+    <message>Authentication is required to manage user accounts</message>
+    <message xml:lang="fr">L’authentification est requise pour gérer les comptes utilisateurs</message>
+    <icon_name>bubbleos-settings</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/bubbleos/bubble-settings-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

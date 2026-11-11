@@ -1,0 +1,341 @@
+/* ==========================================================================
+ * bubbleOS - bubble-settings cyberspace theme
+ * Palette: cyan #22d3ee, sky #38bdf8, blue #60a5fa, indigo #818cf8,
+ *          midnight #0c2340, slate #0f172a, text #e0f2fe
+ * ========================================================================== */
+
+@define-color bubble_cyan #22d3ee;
+@define-color bubble_sky #38bdf8;
+@define-color bubble_blue #60a5fa;
+@define-color bubble_indigo #818cf8;
+@define-color bubble_midnight #0c2340;
+@define-color bubble_slate #0f172a;
+@define-color bubble_text #e0f2fe;
+@define-color bubble_muted #7dd3fc;
+
+* {
+    outline-color: alpha(@bubble_cyan, 0.55);
+}
+
+window {
+    background-color: @bubble_midnight;
+    color: @bubble_text;
+    font-feature-settings: "kern";
+}
+
+headerbar {
+    min-height: 54px;
+    background-image: linear-gradient(to right, #081a30, #0c2340 55%, #102a4a);
+    border-bottom: 1px solid alpha(@bubble_cyan, 0.28);
+    box-shadow: 0 2px 18px alpha(#000000, 0.45);
+}
+
+headerbar .title {
+    color: @bubble_text;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.window-title {
+    color: @bubble_text;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+
+.window-subtitle {
+    color: @bubble_muted;
+    font-size: 11px;
+    letter-spacing: 2px;
+}
+
+.sidebar {
+    background-color: #081a30;
+    border-right: 1px solid alpha(@bubble_sky, 0.18);
+}
+
+.sidebar-list {
+    background: transparent;
+    padding: 4px 8px;
+}
+
+.sidebar-list row {
+    padding: 8px 10px;
+    margin: 2px 0;
+    border-radius: 8px;
+    color: #bae6fd;
+    transition: background-color 160ms ease, color 160ms ease;
+}
+
+.sidebar-list row:hover {
+    background-color: alpha(@bubble_sky, 0.10);
+}
+
+.sidebar-list row:selected {
+    background-image: linear-gradient(to right,
+                                      alpha(@bubble_cyan, 0.26),
+                                      alpha(@bubble_indigo, 0.16));
+    color: @bubble_text;
+    box-shadow: inset 3px 0 @bubble_cyan;
+}
+
+.sidebar-list row:selected label {
+    font-weight: 700;
+}
+
+.page-title {
+    color: @bubble_text;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+.page-subtitle {
+    color: @bubble_muted;
+    font-size: 13px;
+}
+
+.card {
+    background-color: alpha(@bubble_slate, 0.92);
+    border: 1px solid alpha(@bubble_cyan, 0.20);
+    border-radius: 12px;
+    padding: 18px;
+    box-shadow: 0 8px 24px alpha(#000000, 0.28);
+}
+
+.card-title {
+    color: @bubble_cyan;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+}
+
+.row-label {
+    color: #cbe8fb;
+    font-size: 13px;
+}
+
+.hint {
+    color: #7f9db8;
+    font-size: 12px;
+}
+
+.path-label {
+    color: @bubble_muted;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+}
+
+.status {
+    padding: 8px 28px;
+    color: @bubble_cyan;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+}
+
+entry,
+spinbutton,
+combobox button {
+    min-height: 32px;
+    background-color: #0b1c33;
+    border: 1px solid #1e4f73;
+    border-radius: 8px;
+    color: @bubble_text;
+    padding: 2px 10px;
+    box-shadow: none;
+}
+
+entry:focus,
+spinbutton:focus,
+combobox button:focus {
+    border-color: @bubble_cyan;
+    box-shadow: 0 0 0 2px alpha(@bubble_cyan, 0.20);
+}
+
+entry:disabled,
+spinbutton:disabled,
+combobox button:disabled {
+    color: #5b7a94;
+    background-color: #091628;
+}
+
+combobox arrow {
+    color: @bubble_cyan;
+}
+
+button {
+    min-height: 32px;
+    padding: 4px 14px;
+    border: 1px solid alpha(@bubble_sky, 0.40);
+    border-radius: 8px;
+    background-image: linear-gradient(to bottom,
+                                      alpha(#133355, 0.95),
+                                      alpha(#0b1f38, 0.95));
+    color: @bubble_text;
+    box-shadow: 0 1px 4px alpha(#000000, 0.35);
+}
+
+button:hover {
+    border-color: @bubble_cyan;
+    background-image: linear-gradient(to bottom,
+                                      alpha(#17436b, 0.98),
+                                      alpha(#102a49, 0.98));
+}
+
+button:active {
+    background-image: linear-gradient(to bottom,
+                                      alpha(#0b1f38, 0.98),
+                                      alpha(#133355, 0.98));
+}
+
+button.suggested-action {
+    background-image: linear-gradient(to bottom, #22d3ee, #38bdf8);
+    border-color: #67e8f9;
+    color: #04121f;
+    font-weight: 700;
+}
+
+button.suggested-action:hover {
+    background-image: linear-gradient(to bottom, #67e8f9, #22d3ee);
+}
+
+button.destructive-action {
+    background-image: linear-gradient(to bottom, #7f1d3a, #4c1028);
+    border-color: #fb7185;
+    color: #ffe4e6;
+}
+
+button.destructive-action:hover {
+    background-image: linear-gradient(to bottom, #9f2547, #641533);
+}
+
+switch {
+    background-color: #0b1c33;
+    border: 1px solid #1e4f73;
+    border-radius: 999px;
+    min-width: 46px;
+    min-height: 24px;
+}
+
+switch:checked {
+    background-color: @bubble_cyan;
+    border-color: #67e8f9;
+}
+
+switch slider {
+    background-color: #dbeafe;
+    border-radius: 999px;
+    min-width: 20px;
+    min-height: 20px;
+}
+
+checkbutton check {
+    background-color: #0b1c33;
+    border: 1px solid #1e4f73;
+    border-radius: 4px;
+}
+
+checkbutton check:checked {
+    background-color: @bubble_cyan;
+    border-color: #67e8f9;
+    color: #04121f;
+}
+
+scrolledwindow {
+    background: transparent;
+}
+
+scrollbar slider {
+    background-color: alpha(@bubble_sky, 0.42);
+    border-radius: 999px;
+    min-width: 8px;
+    min-height: 8px;
+}
+
+scrollbar slider:hover {
+    background-color: alpha(@bubble_cyan, 0.70);
+}
+
+.wallpaper-preview {
+    border: 1px solid alpha(@bubble_cyan, 0.30);
+    border-radius: 10px;
+    background-color: #06152a;
+}
+
+.users-list {
+    background-color: alpha(#071426, 0.70);
+    border: 1px solid alpha(@bubble_sky, 0.16);
+    border-radius: 10px;
+    padding: 4px;
+}
+
+.users-list row {
+    padding: 9px 10px;
+    border-radius: 8px;
+}
+
+.users-list row:hover {
+    background-color: alpha(@bubble_sky, 0.08);
+}
+
+.users-list row:selected {
+    background-image: linear-gradient(to right,
+                                      alpha(@bubble_cyan, 0.22),
+                                      alpha(@bubble_indigo, 0.14));
+    box-shadow: inset 3px 0 @bubble_cyan;
+}
+
+.user-name {
+    color: @bubble_text;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.user-detail {
+    color: #7f9db8;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+}
+
+.user-avatar {
+    color: @bubble_cyan;
+}
+
+.admin-badge {
+    background-color: alpha(@bubble_indigo, 0.24);
+    border: 1px solid alpha(@bubble_indigo, 0.60);
+    border-radius: 999px;
+    color: #c7d2fe;
+    font-size: 10px;
+    padding: 1px 8px;
+}
+
+.self-badge {
+    background-color: alpha(@bubble_cyan, 0.18);
+    border: 1px solid alpha(@bubble_cyan, 0.55);
+    border-radius: 999px;
+    color: #a5f3fc;
+    font-size: 10px;
+    padding: 1px 8px;
+}
+
+.about-value {
+    color: @bubble_text;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+}
+
+dialog {
+    background-color: @bubble_slate;
+}
+
+dialog .dialog-vbox {
+    padding: 6px 0;
+}
+
+tooltip {
+    background-color: #081a30;
+    border: 1px solid alpha(@bubble_cyan, 0.45);
+    border-radius: 6px;
+    color: @bubble_text;
+}

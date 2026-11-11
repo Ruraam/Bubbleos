@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Paramètres bubbleOS
+Name[en]=bubbleOS Settings
+GenericName=Centre de contrôle
+GenericName[en]=Control Center
+Comment=Centre de contrôle du bureau bubbleOS
+Comment[en]=bubbleOS desktop control center
+Exec=bubble-settings
+Icon=bubbleos-settings
+Terminal=false
+Categories=Settings;DesktopSettings;System;
+Keywords=bubbleos;settings;paramètres;appearance;users;network;session;
+StartupNotify=true
