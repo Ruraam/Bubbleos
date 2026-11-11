@@ -114,11 +114,7 @@ impl BubblePaths {
             "BUBBLEOS_ROOTFS_MOUNT",
             state_dir.join("rootfs"),
         );
-        let store_dir = derived(
-            &mut lookup,
-            "BUBBLEOS_STORE_DIR",
-            state_dir.join("store"),
-        );
+        let store_dir = derived(&mut lookup, "BUBBLEOS_STORE_DIR", state_dir.join("store"));
         let store_objects_dir = derived(
             &mut lookup,
             "BUBBLEOS_STORE_OBJECTS_DIR",
@@ -449,10 +445,7 @@ mod tests {
             paths.rootfs_mount,
             PathBuf::from("/srv/bubble/state/rootfs")
         );
-        assert_eq!(
-            paths.store_dir,
-            PathBuf::from("/srv/bubble/state/store")
-        );
+        assert_eq!(paths.store_dir, PathBuf::from("/srv/bubble/state/store"));
         assert_eq!(
             paths.generations_dir,
             PathBuf::from("/srv/bubble/state/rootfs/generations")
@@ -529,10 +522,7 @@ mod tests {
     #[test]
     fn generation_layout_rejects_an_unmounted_rootfs() {
         let paths = paths_with(&[]);
-        let result = paths.validate_generation_layout_with(
-            |_| true,
-            |_| false,
-        );
+        let result = paths.validate_generation_layout_with(|_| true, |_| false);
 
         assert_eq!(
             result,
@@ -548,10 +538,7 @@ mod tests {
             "BUBBLEOS_GENERATIONS_DIR",
             "/__bubbleos_test__/missing-generations",
         )]);
-        let result = paths.validate_generation_layout_with(
-            |_| true,
-            |_| true,
-        );
+        let result = paths.validate_generation_layout_with(|_| true, |_| true);
 
         assert_eq!(
             result,
