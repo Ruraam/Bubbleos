@@ -34,10 +34,7 @@ impl Default for LimineRenderOptions {
                 "console=ttyS0,115200 quiet selinux=0",
             ),
             kernel_path: env_or("BUBBLEOS_LIMINE_KERNEL", "boot():/vmlinuz"),
-            initramfs_path: env_or(
-                "BUBBLEOS_LIMINE_INITRAMFS",
-                "boot():/initramfs.cpio.gz",
-            ),
+            initramfs_path: env_or("BUBBLEOS_LIMINE_INITRAMFS", "boot():/initramfs.cpio.gz"),
             timeout: env_or("BUBBLEOS_LIMINE_TIMEOUT", "0"),
             boot_assets_dir: PathBuf::from(env_or(
                 "BUBBLEOS_BOOT_ASSETS_DIR",
@@ -130,9 +127,7 @@ fn generation_asset_digest(
             .to_string_lossy()
             .trim_start_matches('/'),
     );
-    let assets = generations_dir
-        .join(generation)
-        .join(assets_relative);
+    let assets = generations_dir.join(generation).join(assets_relative);
     let kernel = assets.join("vmlinuz");
     let initramfs = assets.join("initramfs.cpio.gz");
 
@@ -356,8 +351,12 @@ mod tests {
         }
 
         let rendered = render_config(&root, "uuid-test", "000010", "000002", &options());
-        let current = rendered.find("/bubbleOS (current: generation 000010)").unwrap();
-        let shared = rendered.find("/bubbleOS generation 000009 - Shared kernel").unwrap();
+        let current = rendered
+            .find("/bubbleOS (current: generation 000010)")
+            .unwrap();
+        let shared = rendered
+            .find("/bubbleOS generation 000009 - Shared kernel")
+            .unwrap();
         let previous = rendered
             .find("/bubbleOS generation 000002, previous - Old-system revision")
             .unwrap();
