@@ -8,6 +8,7 @@ use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 
+pub mod generations;
 pub mod system;
 
 /// Centralized BubbleOS filesystem layout.
