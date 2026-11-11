@@ -282,6 +282,15 @@ fn write_generation_metadata(
 }
 
 impl BubblePaths {
+    /// Write generation metadata using a synced temporary file and atomic rename.
+    pub fn generation_write_metadata(
+        &self,
+        generation: &str,
+        description: &str,
+    ) -> io::Result<()> {
+        write_generation_metadata(self, generation, description)
+    }
+
     /// Atomically switch the previous and current generation links.
     ///
     /// Snapshot creation and automatic pruning are intentionally orchestrated
@@ -388,7 +397,7 @@ impl BubblePaths {
             ));
         }
 
-        write_generation_metadata(self, &next_generation, description)?;
+        self.generation_write_metadata(&next_generation, description)?;
         Ok(next_generation)
     }
 }
