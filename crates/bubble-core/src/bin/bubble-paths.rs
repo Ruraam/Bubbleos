@@ -42,11 +42,9 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
         if bubble_core::snapshots::snapshot_valid_name(name) {
             return Ok(());
         }
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "invalid snapshot name",
-        )
-        .into());
+        return Err(
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid snapshot name").into(),
+        );
     }
 
     if command == "snapshot-pending-from-file" {
@@ -126,10 +124,7 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
         "snapshot-pending" => println!(
             "{}",
             paths.snapshot_pending().ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "no valid pending snapshot",
-                )
+                std::io::Error::new(std::io::ErrorKind::NotFound, "no valid pending snapshot")
             })?
         ),
         "snapshot-list" => {
