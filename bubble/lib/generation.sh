@@ -984,6 +984,11 @@ bubble_generation_remove() {
 # ------------------------------------------------------------------------------
 
 bubble_generation_running() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-running
+        return $?
+    fi
+
     local gen
     gen="$(sed -n 's/^GENERATION=//p' /etc/bubbleos/generation 2>/dev/null |
         head -n1)"
