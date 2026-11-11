@@ -145,6 +145,11 @@ bubble_bootloader_render_config() {
 }
 
 bubble_bootloader_root_uuid() {
+    if [[ -x "${BUBBLEOS_RUST_PATHS_BIN:-}" ]]; then
+        bubble_rust_paths bootloader-root-uuid
+        return $?
+    fi
+
     local source uuid
     uuid="$(findmnt -no UUID -T "$BUBBLEOS_ROOTFS_MOUNT" 2>/dev/null || true)"
     if [[ -z "$uuid" ]]; then
