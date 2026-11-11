@@ -195,6 +195,63 @@ fn generation_boot_paths(
     (kernel_path, module_path)
 }
 
+fn resolve_root_uuid<F, G>(mut findmnt: F, mut blkid: G) -> Option<String>
+where
+    F: FnMut(&str) -> Option<String>,
+    G: FnMut(&str) -> Option<String>,
+{
+    if let Some(uuid) = findmnt("UUID").filter(|value| !value.is_empty()) {
+        return Some(uuid);
+    }
+
+    let source = findmnt("SOURCE")?;
+    let source = source.split('[').next().unwrap_or_default();
+    if source.is_empty() {
+        return None;
+    }
+
+    blkid(source).filter(|value| !value.is_empty())
+}
+
+/// Resolve the filesystem UUID of the configured RootFS mountpoint.
+///
+/// This follows the legacy order: findmnt UUID first, then its source device
+/// stripped of any subvolume suffix and queried through blkid.
+pub fn root_uuid(rootfs_mount: &Path) -> Option<String> {
+    let findmnt = |field: &str| {
+        let output = Command::new("findmnt")
+            .args(["-no", field, "-T"])
+            .arg(rootfs_mount)
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        Some(
+            String::from_utf8_lossy(&output.stdout)
+                .trim_end_matches('\n')
+                .to_owned(),
+        )
+    };
+
+    resolve_root_uuid(findmnt, |source| {
+        let output = Command::new("blkid")
+            .args(["-s", "UUID", "-o", "value", source])
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        Some(
+            String::from_utf8_lossy(&output.stdout)
+                .trim_end_matches('\n')
+                .to_owned(),
+        )
+    })
+}
+
 /// Render the exact Limine menu used by the legacy shell renderer.
 ///
 /// Current and previous may be empty, matching the shell function's optional
@@ -299,6 +356,59 @@ mod tests {
             format!("GENERATION={id}\nDESCRIPTION={description}\n"),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn root_uuid_prefers_findmnt_uuid() {
+        let mut blkid_called = false;
+        let uuid = super::resolve_root_uuid(
+            |field| (field == "UUID").then(|| "uuid-findmnt".to_owned()),
+            |_| {
+                blkid_called = true;
+                Some("uuid-blkid".to_owned())
+            },
+        );
+
+        assert_eq!(uuid, Some("uuid-findmnt".to_owned()));
+        assert!(!blkid_called);
+    }
+
+    #[test]
+    fn root_uuid_falls_back_to_blkid_after_stripping_subvolume_suffix() {
+        let mut queried_source = String::new();
+        let uuid = super::resolve_root_uuid(
+            |field| match field {
+                "UUID" => Some(String::new()),
+                "SOURCE" => Some("/dev/mapper/bubble-root[/@rootfs]".to_owned()),
+                _ => None,
+            },
+            |source| {
+                queried_source = source.to_owned();
+                Some("uuid-blkid".to_owned())
+            },
+        );
+
+        assert_eq!(uuid, Some("uuid-blkid".to_owned()));
+        assert_eq!(queried_source, "/dev/mapper/bubble-root");
+    }
+
+    #[test]
+    fn root_uuid_fails_when_findmnt_has_no_device_source() {
+        let mut blkid_called = false;
+        let uuid = super::resolve_root_uuid(
+            |field| match field {
+                "UUID" => Some(String::new()),
+                "SOURCE" => Some(String::new()),
+                _ => None,
+            },
+            |_| {
+                blkid_called = true;
+                Some("unexpected".to_owned())
+            },
+        );
+
+        assert_eq!(uuid, None);
+        assert!(!blkid_called);
     }
 
     #[test]
