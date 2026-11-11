@@ -95,6 +95,10 @@ bubble_snapshot_destination() {
 }
 
 bubble_snapshot_valid_name() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-valid-name "${1:-}"
+        return $?
+    fi
     case "${1:-}" in
         ""|.|..|.*|*[!A-Za-z0-9._-]*) return 1 ;;
     esac
@@ -102,10 +106,18 @@ bubble_snapshot_valid_name() {
 }
 
 bubble_snapshot_pending_path() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-pending-path
+        return $?
+    fi
     printf '%s/var-restore.request\n' "$BUBBLEOS_SNAPSHOTS_DIR"
 }
 
 bubble_snapshot_pending_from_file() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-pending-from-file "${1:-}"
+        return $?
+    fi
     local marker="$1" line
     [[ -r "$marker" ]] || return 1
     while IFS= read -r line; do
@@ -122,6 +134,10 @@ bubble_snapshot_pending_from_file() {
 }
 
 bubble_snapshot_pending() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-pending
+        return $?
+    fi
     bubble_snapshot_pending_from_file "$(bubble_snapshot_pending_path)"
 }
 
@@ -526,6 +542,10 @@ bubble_generation_list() {
 }
 
 bubble_snapshot_list() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths snapshot-list
+        return $?
+    fi
     [[ -d "$BUBBLEOS_SNAPSHOTS_DIR" ]] || return 1
     find "$BUBBLEOS_SNAPSHOTS_DIR" -mindepth 2 -maxdepth 2 -type d -printf '%P\n' 2>/dev/null |
         sort
