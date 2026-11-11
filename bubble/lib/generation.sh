@@ -22,6 +22,10 @@ bubble_generation_link_target() {
 }
 
 bubble_generation_current() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-current
+        return $?
+    fi
     local gen
     gen="$(bubble_generation_link_target "$BUBBLEOS_CURRENT_LINK")" || return 1
     [[ -d "$(bubble_generation_path "$gen")" ]] || return 1
@@ -29,6 +33,10 @@ bubble_generation_current() {
 }
 
 bubble_generation_previous() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-previous
+        return $?
+    fi
     local gen
     gen="$(bubble_generation_link_target "$BUBBLEOS_PREVIOUS_LINK")" || return 1
     [[ -d "$(bubble_generation_path "$gen")" ]] || return 1
