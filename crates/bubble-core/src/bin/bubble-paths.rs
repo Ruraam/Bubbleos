@@ -60,45 +60,45 @@ fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
     }
 
     if command == "store-object-dir" {
-        let value = argument
-            .and_then(OsStr::to_str)
-            .ok_or_else(|| std::io::Error::new(
+        let value = argument.and_then(OsStr::to_str).ok_or_else(|| {
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "store-object-dir requires a UTF-8 digest",
-            ))?;
+            )
+        })?;
         println!("{}", paths.store_object_dir(value)?.display());
         return Ok(());
     }
 
     if command == "store-object-manifest" {
-        let value = argument
-            .and_then(OsStr::to_str)
-            .ok_or_else(|| std::io::Error::new(
+        let value = argument.and_then(OsStr::to_str).ok_or_else(|| {
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "store-object-manifest requires a UTF-8 digest",
-            ))?;
+            )
+        })?;
         println!("{}", paths.store_object_manifest(value)?.display());
         return Ok(());
     }
 
     if command == "store-latest-version" {
-        let value = argument
-            .and_then(OsStr::to_str)
-            .ok_or_else(|| std::io::Error::new(
+        let value = argument.and_then(OsStr::to_str).ok_or_else(|| {
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "store-latest-version requires a UTF-8 package ID",
-            ))?;
+            )
+        })?;
         println!("{}", paths.store_latest_version(value)?);
         return Ok(());
     }
 
     if command == "store-info-id" {
-        let value = argument
-            .and_then(OsStr::to_str)
-            .ok_or_else(|| std::io::Error::new(
+        let value = argument.and_then(OsStr::to_str).ok_or_else(|| {
+            std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "store-info-id requires a UTF-8 package selector",
-            ))?;
+            )
+        })?;
         print!("{}", paths.store_info_for_id(value)?);
         return Ok(());
     }
@@ -351,7 +351,11 @@ fn main() {
         "generation-create" => 2,
         "generation-switch-links" => 2,
         "generation-write-metadata" => 2,
-        "store-object-dir" | "store-object-manifest" | "store-latest-version" | "store-info-id" | "store-info-file" => 1,
+        "store-object-dir"
+        | "store-object-manifest"
+        | "store-latest-version"
+        | "store-info-id"
+        | "store-info-file" => 1,
         "version-compare" | "version-matches" => 2,
         "bootloader-render" => 4,
         _ => 0,
