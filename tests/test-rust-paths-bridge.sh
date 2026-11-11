@@ -34,7 +34,12 @@ printf '%s\n' \
     "$BUBBLEOS_SNAPSHOTS_DIR" \
     "$BUBBLEOS_GENERATIONS_DIR" \
     "$BUBBLEOS_CURRENT_LINK" \
-    "$BUBBLEOS_PREVIOUS_LINK" > "$BUBBLEOS_STUB_CONFIG_FILE"
+    "$BUBBLEOS_PREVIOUS_LINK" \
+    "$BUBBLEOS_LIMINE_CMDLINE" \
+    "$BUBBLEOS_LIMINE_KERNEL" \
+    "$BUBBLEOS_LIMINE_INITRAMFS" \
+    "$BUBBLEOS_LIMINE_TIMEOUT" \
+    "$BUBBLEOS_ESP_GENERATIONS_DIR" > "$BUBBLEOS_STUB_CONFIG_FILE"
 STUB
 chmod 0755 "$BUBBLEOS_RUST_PATHS_BIN"
 
@@ -58,6 +63,11 @@ BUBBLEOS_SNAPSHOTS_DIR="$TMP_DIR/snapshots"
 BUBBLEOS_GENERATIONS_DIR="$TMP_DIR/generations"
 BUBBLEOS_CURRENT_LINK="$TMP_DIR/rootfs/current"
 BUBBLEOS_PREVIOUS_LINK="$TMP_DIR/rootfs/previous"
+BUBBLEOS_LIMINE_CMDLINE="bridge-console quiet"
+BUBBLEOS_LIMINE_KERNEL="boot():/bridge-vmlinuz"
+BUBBLEOS_LIMINE_INITRAMFS="boot():/bridge-initramfs.cpio.gz"
+BUBBLEOS_LIMINE_TIMEOUT="3"
+BUBBLEOS_ESP_GENERATIONS_DIR="esp-generations"
 
 # Ensure the values above are not being inherited by the helper by accident.
 export -n BUBBLEOS_NAME BUBBLEOS_VERSION BUBBLEOS_CHANNEL
@@ -66,6 +76,8 @@ export -n BUBBLEOS_ROOTFS_MOUNT BUBBLEOS_ULPM_DIR BUBBLEOS_ULPM_CONFIG_DIR
 export -n BUBBLEOS_ULPM_CACHE_DIR BUBBLEOS_STORE_DIR BUBBLEOS_STORE_OBJECTS_DIR
 export -n BUBBLEOS_STORE_PACKAGES_DIR BUBBLEOS_BOOT_ASSETS_DIR BUBBLEOS_SNAPSHOTS_DIR
 export -n BUBBLEOS_GENERATIONS_DIR BUBBLEOS_CURRENT_LINK BUBBLEOS_PREVIOUS_LINK
+export -n BUBBLEOS_LIMINE_CMDLINE BUBBLEOS_LIMINE_KERNEL BUBBLEOS_LIMINE_INITRAMFS
+export -n BUBBLEOS_LIMINE_TIMEOUT BUBBLEOS_ESP_GENERATIONS_DIR
 
 # shellcheck disable=SC1091
 source "$ROOT/bubble/lib/paths.sh"
@@ -73,6 +85,8 @@ source "$ROOT/bubble/lib/paths.sh"
 source "$ROOT/bubble/lib/system.sh"
 # shellcheck disable=SC1091
 source "$ROOT/bubble/lib/generation.sh"
+# shellcheck disable=SC1091
+source "$ROOT/bubble/lib/bootloader.sh"
 
 EXPECTED_CONFIG="$(printf '%s\n' \
     "$BUBBLEOS_NAME" "$BUBBLEOS_VERSION" "$BUBBLEOS_CHANNEL" \
@@ -82,21 +96,18 @@ EXPECTED_CONFIG="$(printf '%s\n' \
     "$BUBBLEOS_STORE_DIR" "$BUBBLEOS_STORE_OBJECTS_DIR" \
     "$BUBBLEOS_STORE_PACKAGES_DIR" "$BUBBLEOS_BOOT_ASSETS_DIR" \
     "$BUBBLEOS_SNAPSHOTS_DIR" "$BUBBLEOS_GENERATIONS_DIR" \
-    "$BUBBLEOS_CURRENT_LINK" "$BUBBLEOS_PREVIOUS_LINK")"
+    "$BUBBLEOS_CURRENT_LINK" "$BUBBLEOS_PREVIOUS_LINK" \
+    "$BUBBLEOS_LIMINE_CMDLINE" "$BUBBLEOS_LIMINE_KERNEL" \
+    "$BUBBLEOS_LIMINE_INITRAMFS" "$BUBBLEOS_LIMINE_TIMEOUT" \
+    "$BUBBLEOS_ESP_GENERATIONS_DIR")"
 
 assert_rust_call() {
-    local expected_command="$1" function_name="$2" expected_argument="" expected_args=""
+    local expected_args="$1" function_name="$2" argument
     shift 2
-    if (( $# )); then
-        expected_argument="$1"
-    fi
     "$function_name" "$@"
-
-    if [[ -n "$expected_argument" ]]; then
-        expected_args="$(printf '%s\n%s' "$expected_command" "$expected_argument")"
-    else
-        expected_args="$expected_command"
-    fi
+    for argument in "$@"; do
+        expected_args+=$'\n'"$argument"
+    done
     [[ "$(cat "$BUBBLEOS_STUB_ARGS_FILE")" == "$expected_args" ]]
     [[ "$(cat "$BUBBLEOS_STUB_CONFIG_FILE")" == "$EXPECTED_CONFIG" ]]
 }
@@ -122,5 +133,7 @@ assert_rust_call snapshot-pending-path bubble_snapshot_pending_path
 assert_rust_call snapshot-pending-from-file bubble_snapshot_pending_from_file "$TMP_DIR/marker"
 assert_rust_call snapshot-pending bubble_snapshot_pending
 assert_rust_call snapshot-list bubble_snapshot_list
+assert_rust_call bootloader-render bubble_bootloader_render_config \
+    "$TMP_DIR/generations" uuid-test 000010 000009
 
 printf 'Rust path bridge: OK\n'
