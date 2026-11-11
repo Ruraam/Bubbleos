@@ -106,6 +106,14 @@ assert_rust_call generation-previous bubble_generation_previous
 assert_rust_call status bubble_system_status
 assert_rust_call generation-list bubble_generation_list
 assert_rust_call generation-next bubble_generation_next
-assert_rust_call $'generation-exists\n000123' bubble_generation_exists 000123
+assert_rust_call 
+generation-exists\n000123' bubble_generation_exists 000123
+assert_rust_call 
+snapshot-valid-name\nrestore.001' bubble_snapshot_valid_name restore.001
+assert_rust_call snapshot-pending-path bubble_snapshot_pending_path
+assert_rust_call 
+snapshot-pending-from-file\n'"$TMP_DIR/marker" bubble_snapshot_pending_from_file "$TMP_DIR/marker"
+assert_rust_call snapshot-pending bubble_snapshot_pending
+assert_rust_call snapshot-list bubble_snapshot_list
 
 printf 'Rust path bridge: OK\n'
