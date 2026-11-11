@@ -16,6 +16,26 @@ fn generation_number(path: &Path) -> Option<u64> {
     name.parse().ok()
 }
 
+fn parse_running_generation(contents: &[u8]) -> Option<String> {
+    for line in contents.split(|byte| *byte == b'\n') {
+        if let Some(generation) = line.strip_prefix(b"GENERATION=") {
+            if generation.len() != 6
+                || !generation.iter().all(u8::is_ascii_digit)
+            {
+                return None;
+            }
+            return String::from_utf8(generation.to_vec()).ok();
+        }
+    }
+    None
+}
+
+/// Read the generation metadata written for the currently mounted rootfs.
+pub fn running_generation() -> Option<String> {
+    let contents = std::fs::read("/etc/bubbleos/generation").ok()?;
+    parse_running_generation(&contents)
+}
+
 impl BubblePaths {
     /// Match the legacy generation existence check, including directory symlinks.
     pub fn generation_exists(&self, generation: &str) -> bool {
@@ -119,6 +139,36 @@ mod tests {
         .collect();
 
         BubblePaths::from_lookup(|key| values.get(key).cloned())
+    }
+
+    #[test]
+    fn running_generation_reads_the_first_matching_metadata_line() {
+        assert_eq!(
+            super::parse_running_generation(
+                b"CREATED_AT=2026-11-11T00:00:00Z\nGENERATION=000123\nGENERATION=000124\n"
+            ),
+            Some("000123".to_owned())
+        );
+    }
+
+    #[test]
+    fn running_generation_rejects_the_first_invalid_match_without_skipping_it() {
+        assert_eq!(
+            super::parse_running_generation(b"GENERATION=123\nGENERATION=000124\n"),
+            None
+        );
+        assert_eq!(
+            super::parse_running_generation(b"GENERATION=000123\r\n"),
+            None
+        );
+    }
+
+    #[test]
+    fn running_generation_accepts_an_unterminated_final_metadata_line() {
+        assert_eq!(
+            super::parse_running_generation(b"GENERATION=000123"),
+            Some("000123".to_owned())
+        );
     }
 
     #[test]
