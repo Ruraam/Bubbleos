@@ -9,7 +9,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|status>";
 
 fn run(command: &str) -> Result<(), Box<dyn Error>> {
     let paths = BubblePaths::from_env();
@@ -55,6 +55,7 @@ fn run(command: &str) -> Result<(), Box<dyn Error>> {
                 )
             })?
         ),
+        "status" => print!("{}", system::status_report(&paths)),
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
