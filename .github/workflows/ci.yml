@@ -93,12 +93,12 @@ jobs:
 
       - name: Run Clippy
         if: steps.rust-workspace.outputs.present == 'true'
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo clippy --offline --locked --workspace --all-targets --all-features -- -D warnings
 
       - name: Build Rust workspace
         if: steps.rust-workspace.outputs.present == 'true'
-        run: cargo build --workspace --all-targets --all-features
+        run: cargo build --offline --locked --workspace --all-targets --all-features
 
       - name: Run Rust tests
         if: steps.rust-workspace.outputs.present == 'true'
-        run: cargo test --workspace --all-features
+        run: cargo test --offline --locked --workspace --all-features
