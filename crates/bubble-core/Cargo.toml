@@ -1,0 +1,11 @@
+[package]
+name = "bubble-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Core system primitives for BubbleOS"
+license = "GPL-3.0-or-later"
+
+[lib]
+name = "bubble_core"
+path = "src/lib.rs"
