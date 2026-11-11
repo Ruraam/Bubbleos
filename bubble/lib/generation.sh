@@ -7,6 +7,10 @@ bubble_generation_path() {
 }
 
 bubble_generation_exists() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-exists "${1:-}"
+        return $?
+    fi
     [[ "${1:-}" =~ ^[0-9]{6}$ ]] || return 1
     [[ -d "$(bubble_generation_path "$1")" ]]
 }
@@ -44,6 +48,10 @@ bubble_generation_previous() {
 }
 
 bubble_generation_next() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-next
+        return $?
+    fi
     local last=0 d n
     shopt -s nullglob
     for d in "$BUBBLEOS_GENERATIONS_DIR"/*; do
@@ -505,6 +513,10 @@ bubble_generation_activate() {
 }
 
 bubble_generation_list() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-list
+        return $?
+    fi
     local d
     shopt -s nullglob
     for d in "$BUBBLEOS_GENERATIONS_DIR"/*; do
