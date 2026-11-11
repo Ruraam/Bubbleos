@@ -40,6 +40,12 @@ printf '%s\n' \
     "$BUBBLEOS_LIMINE_INITRAMFS" \
     "$BUBBLEOS_LIMINE_TIMEOUT" \
     "$BUBBLEOS_ESP_GENERATIONS_DIR" > "$BUBBLEOS_STUB_CONFIG_FILE"
+
+case "${1:-}" in
+    arch) printf 'amd64\\n' ;;
+    version-compare) printf '0\\n' ;;
+    version-matches) printf 'true\\n' ;;
+esac
 STUB
 chmod 0755 "$BUBBLEOS_RUST_PATHS_BIN"
 
@@ -121,6 +127,9 @@ assert_rust_call root-subvol bubble_system_root_subvol
 assert_rust_call root-fstype bubble_system_root_fstype
 assert_rust_call ulpm-version bubble_ulpm_version
 assert_rust_call lpk-format-version bubble_lpk_format_version
+assert_rust_call arch bubble_arch
+assert_rust_call version-compare bubble_version_compare 1.0 1.0
+assert_rust_call version-matches bubble_version_matches 1.0 '*'
 assert_rust_call generation-current bubble_generation_current
 assert_rust_call generation-previous bubble_generation_previous
 assert_rust_call generation-running bubble_generation_running
