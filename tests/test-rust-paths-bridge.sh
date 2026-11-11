@@ -85,15 +85,7 @@ EXPECTED_CONFIG="$(printf '%s\n' \
     "$BUBBLEOS_CURRENT_LINK" "$BUBBLEOS_PREVIOUS_LINK")"
 
 assert_rust_call() {
-    local expected_args="$1"
-    shift
-    "$@"
-    [[ "$(cat "$BUBBLEOS_STUB_ARGS_FILE")" == "$expected_args" ]]
-    [[ "$(cat "$BUBBLEOS_STUB_CONFIG_FILE")" == "$EXPECTED_CONFIG" ]]
-}
-
-assert_rust_call() {
-    local expected_command="$1" function_name="$2" expected_argument=""
+    local expected_command="$1" function_name="$2" expected_argument="" expected_args=""
     shift 2
     if (( $# )); then
         expected_argument="$1"
