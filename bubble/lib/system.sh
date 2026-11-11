@@ -14,43 +14,63 @@ bubble_system_bootstrap() {
 }
 
 bubble_ulpm_version() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths ulpm-version
+        return $?
+    fi
     local entry="${BUBBLEOS_ULPM_DIR}/bin/ulpm" value
     [[ -r "$entry" ]] || return 1
-    value="$(sed -n 's/^export ULPM_VERSION="\(.*\)"$/\1/p' "$entry" | head -n1)"
+    value="$(sed -n 's/^export ULPM_VERSION="\\(.*\\)"$/\\1/p' "$entry" | head -n1)"
     [[ -n "$value" ]] || return 1
-    printf '%s\n' "$value"
+    printf '%s\\n' "$value"
 }
 
 bubble_lpk_format_version() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths lpk-format-version
+        return $?
+    fi
     local entry="${BUBBLEOS_ULPM_DIR}/bin/ulpm" value
     [[ -r "$entry" ]] || return 1
-    value="$(sed -n 's/^export ULPM_FORMAT_VERSION="\(.*\)"$/\1/p' "$entry" | head -n1)"
+    value="$(sed -n 's/^export ULPM_FORMAT_VERSION="\\(.*\\)"$/\\1/p' "$entry" | head -n1)"
     [[ -n "$value" ]] || return 1
-    printf '%s\n' "$value"
+    printf '%s\\n' "$value"
 }
 
 bubble_system_init() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths system-init
+        return $?
+    fi
     local version
     if [[ -x /usr/bin/systemctl ]]; then
         version="$(systemctl --version 2>/dev/null | awk 'NR == 1 {print $2}')"
-        printf 'systemd %s\n' "${version:-unknown}"
+        printf 'systemd %s\\n' "${version:-unknown}"
     elif [[ -x /sbin/init ]]; then
-        printf 'development init\n'
+        printf 'development init\\n'
     else
-        printf 'unknown\n'
+        printf 'unknown\\n'
     fi
 }
 
 bubble_system_root_subvol() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths root-subvol
+        return $?
+    fi
     local options
     options="$(findmnt -no OPTIONS / 2>/dev/null || true)"
-    printf '%s\n' "$options" |
-        tr ',' '\n' |
+    printf '%s\\n' "$options" |
+        tr ',' '\\n' |
         sed -n 's|^subvol=/*||p' |
         head -n1
 }
 
 bubble_system_root_fstype() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths root-fstype
+        return $?
+    fi
     findmnt -no FSTYPE / 2>/dev/null || true
 }
 
