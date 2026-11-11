@@ -31,19 +31,28 @@ fn run(command: &str) -> Result<(), Box<dyn Error>> {
         "lpk-format-version" => println!(
             "{}",
             system::lpk_format_version(&paths).ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::NotFound, "LPK format version is unavailable")
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "LPK format version is unavailable",
+                )
             })?
         ),
         "generation-current" => println!(
             "{}",
             paths.current_generation().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::NotFound, "current generation is unavailable")
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "current generation is unavailable",
+                )
             })?
         ),
         "generation-previous" => println!(
             "{}",
             paths.previous_generation().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::NotFound, "previous generation is unavailable")
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "previous generation is unavailable",
+                )
             })?
         ),
         _ => {
