@@ -45,6 +45,7 @@ case "${1:-}" in
     arch) printf 'amd64\n' ;;
     version-compare) printf '0\n' ;;
     version-matches) printf 'true\n' ;;
+    generation-create) printf '000124\n' ;;
 esac
 STUB
 chmod 0755 "$BUBBLEOS_RUST_PATHS_BIN"
@@ -138,6 +139,9 @@ assert_rust_call generation-running bubble_generation_running
 assert_rust_call status bubble_system_status
 assert_rust_call generation-list bubble_generation_list
 assert_rust_call generation-next bubble_generation_next
+bubble_generation_create --from 000123 --description bridge-test >/dev/null
+[[ "$(cat "$BUBBLEOS_STUB_ARGS_FILE")" == "$(printf '%s\n' generation-create 000123 bridge-test)" ]]
+[[ "$(cat "$BUBBLEOS_STUB_CONFIG_FILE")" == "$EXPECTED_CONFIG" ]]
 assert_rust_call generation-exists bubble_generation_exists 000123
 assert_rust_call snapshot-valid-name bubble_snapshot_valid_name restore.001
 assert_rust_call snapshot-pending-path bubble_snapshot_pending_path
