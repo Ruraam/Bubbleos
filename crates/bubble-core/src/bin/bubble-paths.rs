@@ -110,12 +110,19 @@ fn main() {
         }
     };
 
+    let argument = args.next();
+
     if args.next().is_some() {
         eprintln!("{USAGE}");
         process::exit(2);
     }
 
-    if let Err(error) = run(&command, args.next().as_deref()) {
+    if command != "generation-exists" && argument.is_some() {
+        eprintln!("{USAGE}");
+        process::exit(2);
+    }
+
+    if let Err(error) = run(&command, argument.as_deref()) {
         eprintln!("{error}");
         process::exit(1);
     }
