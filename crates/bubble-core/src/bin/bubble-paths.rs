@@ -7,9 +7,10 @@
 use bubble_core::{require_root, system, BubblePaths};
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
+use std::path::Path;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-list|generation-next|generation-exists <number>|status>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|status>";
 
 fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
     let paths = BubblePaths::from_env();
@@ -27,6 +28,43 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("generation {generation} does not exist"),
+        )
+        .into());
+    }
+
+    if command == "snapshot-valid-name" {
+        let name = argument.and_then(OsStr::to_str).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "snapshot-valid-name requires a name",
+            )
+        })?;
+        if bubble_core::snapshots::snapshot_valid_name(name) {
+            return Ok(());
+        }
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "invalid snapshot name",
+        )
+        )
+        .into());
+    }
+
+    if command == "snapshot-pending-from-file" {
+        let marker = argument.and_then(OsStr::to_str).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "snapshot-pending-from-file requires a marker path",
+            )
+        })?;
+        if let Some(snapshot) = paths.snapshot_pending_from_file(Path::new(marker)) {
+            println!("{snapshot}");
+            return Ok(());
+        }
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "no valid pending snapshot in marker",
+        )
         )
         .into());
     }
@@ -86,6 +124,21 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
             }
         }
         "generation-next" => println!("{}", paths.generation_next()?),
+        "snapshot-pending-path" => println!("{}", paths.snapshot_pending_path().display()),
+        "snapshot-pending" => println!(
+            "{}",
+            paths.snapshot_pending().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "no valid pending snapshot",
+                )
+            })?
+        ),
+        "snapshot-list" => {
+            for snapshot in paths.snapshot_list()? {
+                println!("{snapshot}");
+            }
+        }
         "status" => print!("{}", system::status_report(&paths)),
         _ => {
             return Err(std::io::Error::new(
@@ -117,7 +170,11 @@ fn main() {
         process::exit(2);
     }
 
-    if command != "generation-exists" && argument.is_some() {
+    let command_accepts_argument = matches!(
+        command.as_str(),
+        "generation-exists" | "snapshot-valid-name" | "snapshot-pending-from-file"
+    );
+    if !command_accepts_argument && argument.is_some() {
         eprintln!("{USAGE}");
         process::exit(2);
     }
