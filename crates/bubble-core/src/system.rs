@@ -314,10 +314,7 @@ mod tests {
             report.find("Current generation:").unwrap()
                 < report.find("Previous generation:").unwrap()
         );
-        assert!(
-            report.find("ULPM Engine:").unwrap()
-                < report.find("LPK Format:").unwrap()
-        );
+        assert!(report.find("ULPM Engine:").unwrap() < report.find("LPK Format:").unwrap());
     }
 
     #[test]
