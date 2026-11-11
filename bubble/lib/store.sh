@@ -48,19 +48,33 @@ bubble_store_require() {
 }
 
 bubble_store_object_dir() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths store-object-dir "$@"
+        return $?
+    fi
     local digest="${1:-}"
     [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
     printf '%s/%s\n' "$BUBBLEOS_STORE_OBJECTS_DIR" "$digest"
+
 }
 
 bubble_store_object_manifest() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths store-object-manifest "$@"
+        return $?
+    fi
     local digest="${1:-}" object
     object="$(bubble_store_object_dir "$digest")" || return 1
     [[ -f "$object/manifest.json" ]] || return 1
     printf '%s/manifest.json\n' "$object"
+
 }
 
 bubble_store_latest_version() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths store-latest-version "$@"
+        return $?
+    fi
     local id="${1:-}" dir
     [[ -n "$id" && "$id" != */* && "$id" != *..* ]] || return 1
     dir="$BUBBLEOS_STORE_PACKAGES_DIR/$id"
@@ -68,11 +82,16 @@ bubble_store_latest_version() {
     find "$dir" -mindepth 1 -maxdepth 1 -type l -printf '%f\n' 2>/dev/null |
         LC_ALL=C sort -V |
         tail -n1
+
 }
 
 # bubble_store_info_for_id <id|id=version>
 # Prints: id<TAB>version<TAB>type<TAB>name<TAB>digest
 bubble_store_info_for_id() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths store-info-id "$@"
+        return $?
+    fi
     local selector="${1:-}" id version link digest object
     [[ -n "$selector" ]] || return 1
     if [[ "$selector" == *=* ]]; then
@@ -114,11 +133,16 @@ bubble_store_info_for_id() {
         [.id, .version, (.type // .kind // "system"), (.name // .id), $digest] |
         @tsv
     ' "$object/manifest.json"
+
 }
 
 # bubble_store_info_for_file <package.lpk>
 # Prints the same fields after the package has been imported.
 bubble_store_info_for_file() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths store-info-file "$@"
+        return $?
+    fi
     local file="${1:-}" digest object
     [[ -f "$file" && -r "$file" && ! -L "$file" ]] || return 1
     digest="$(sha256sum -- "$file" | awk '{print $1}')" || return 1
@@ -131,4 +155,5 @@ bubble_store_info_for_file() {
         [.id, .version, (.type // .kind // "system"), (.name // .id), $digest] |
         @tsv
     ' "$object/manifest.json"
+
 }
