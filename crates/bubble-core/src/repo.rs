@@ -28,11 +28,7 @@ pub fn architecture() -> String {
         .ok()
         .filter(|output| output.status.success())
         .map(|output| {
-            architecture_from_machine(
-                String::from_utf8_lossy(&output.stdout)
-                    .trim()
-            )
-            .to_owned()
+            architecture_from_machine(String::from_utf8_lossy(&output.stdout).trim()).to_owned()
         })
         .unwrap_or_else(|| "unknown".to_owned())
 }
@@ -60,10 +56,10 @@ fn compare_fallback(left: &str, right: &str) -> Ordering {
             continue;
         }
 
-        let left_numeric = !left_part.is_empty()
-            && left_part.bytes().all(|byte| byte.is_ascii_digit());
-        let right_numeric = !right_part.is_empty()
-            && right_part.bytes().all(|byte| byte.is_ascii_digit());
+        let left_numeric =
+            !left_part.is_empty() && left_part.bytes().all(|byte| byte.is_ascii_digit());
+        let right_numeric =
+            !right_part.is_empty() && right_part.bytes().all(|byte| byte.is_ascii_digit());
 
         if left_numeric && right_numeric {
             match left_part.len().cmp(&right_part.len()) {
@@ -150,8 +146,7 @@ pub fn version_matches(version: &str, constraint: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        architecture_from_machine, compare_fallback, compare_versions, strip_epoch,
-        version_matches,
+        architecture_from_machine, compare_fallback, compare_versions, strip_epoch, version_matches,
     };
     use std::cmp::Ordering;
 
