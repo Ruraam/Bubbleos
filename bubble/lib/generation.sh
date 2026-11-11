@@ -454,6 +454,11 @@ bubble_generation_create() {
         esac
     done
 
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths generation-create "$from" "$description"
+        return $?
+    fi
+
     bubble_require_root || return 1
     bubble_require_generation_layout || return 1
 
