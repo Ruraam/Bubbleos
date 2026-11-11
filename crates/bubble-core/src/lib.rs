@@ -383,7 +383,7 @@ impl BubblePaths {
 
 #[cfg(test)]
 mod tests {
-    use super::BubblePaths;
+    use super::{BubblePaths, BubbleSystemError};
     use std::collections::HashMap;
     use std::ffi::OsString;
     use std::path::PathBuf;
