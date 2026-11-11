@@ -8,6 +8,8 @@ use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 
+pub mod system;
+
 /// Centralized BubbleOS filesystem layout.
 ///
 /// Values are read from the same environment variables used by the legacy
