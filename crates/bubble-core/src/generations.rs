@@ -8,6 +8,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 static METADATA_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static LINK_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn is_generation_number(value: &str) -> bool {
     value.len() == 6 && value.bytes().all(|byte| byte.is_ascii_digit())
@@ -112,6 +113,57 @@ impl BubblePaths {
     /// Parse a generation directory name without accepting signs or prefixes.
     pub fn is_generation_number(value: &str) -> bool {
         is_generation_number(value)
+    }
+}
+
+fn replace_symlink_atomically(link: &Path, target: &str) -> io::Result<()> {
+    let parent = link.parent().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("link has no parent directory: {}", link.display()),
+        )
+    })?;
+    fs::create_dir_all(parent)?;
+
+    let sequence = LINK_TEMP_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
+    let temporary = parent.join(format!(
+        ".{}.{}.{}.tmp",
+        link.file_name().and_then(|name| name.to_str()).unwrap_or("bubble-link"),
+        std::process::id(),
+        sequence
+    ));
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, &temporary)?;
+
+    #[cfg(not(unix))]
+    {
+        let _ = target;
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "BubbleOS generation links require Unix symbolic links",
+        ));
+    }
+
+    if let Err(error) = fs::rename(&temporary, link) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+
+    File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
+fn remove_symlink_if_present(link: &Path) -> io::Result<()> {
+    match fs::remove_file(link) {
+        Ok(()) => {
+            if let Some(parent) = link.parent() {
+                File::open(parent)?.sync_all()?;
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
     }
 }
 
@@ -228,6 +280,64 @@ fn write_generation_metadata(
 }
 
 impl BubblePaths {
+    /// Atomically switch the previous and current generation links.
+    ///
+    /// Snapshot creation and automatic pruning are intentionally orchestrated
+    /// by the legacy shell wrapper. This method performs only the final link
+    /// switch after those operations have succeeded.
+    pub fn generation_switch_links(
+        &self,
+        generation: &str,
+        expected_current: &str,
+    ) -> io::Result<()> {
+        if !is_generation_number(generation) || !self.generation_exists(generation) {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("generation {generation} does not exist"),
+            ));
+        }
+
+        let actual_current = self.current_generation().unwrap_or_default();
+        if actual_current != expected_current {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "current generation changed while activation was being prepared",
+            ));
+        }
+
+        if !expected_current.is_empty() {
+            if !is_generation_number(expected_current) || !self.generation_exists(expected_current)
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("current generation {expected_current} is no longer available"),
+                ));
+            }
+            replace_symlink_atomically(
+                &self.previous_link,
+                &format!("generations/{expected_current}"),
+            )?;
+        } else {
+            remove_symlink_if_present(&self.previous_link)?;
+        }
+
+        replace_symlink_atomically(
+            &self.current_link,
+            &format!("generations/{generation}"),
+        )?;
+
+        let status = Command::new("sync")
+            .status()?;
+        if !status.success() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "sync failed after switching the generation links",
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Clone a generation using Btrfs and atomically write its metadata.
     ///
     /// The destination is selected with the same six-digit sequence as the
@@ -359,6 +469,82 @@ mod tests {
         let error = super::write_generation_metadata(&paths, "000123", "blocked").unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
         assert!(!outside.join("bubbleos/generation").exists());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn generation_switch_updates_previous_and_current_links_atomically() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root();
+        let generations = root.join("generations");
+        std::fs::create_dir_all(generations.join("000123")).unwrap();
+        std::fs::create_dir_all(generations.join("000124")).unwrap();
+        symlink("generations/000123", root.join("current")).unwrap();
+
+        let paths = paths_for_test(&root);
+        paths
+            .generation_switch_links("000124", "000123")
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read_link(root.join("previous")).unwrap(),
+            Path::new("generations/000123")
+        );
+        assert_eq!(
+            std::fs::read_link(root.join("current")).unwrap(),
+            Path::new("generations/000124")
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn generation_switch_refuses_a_stale_expected_current_link() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root();
+        let generations = root.join("generations");
+        std::fs::create_dir_all(generations.join("000123")).unwrap();
+        std::fs::create_dir_all(generations.join("000124")).unwrap();
+        std::fs::create_dir_all(generations.join("000125")).unwrap();
+        symlink("generations/000125", root.join("current")).unwrap();
+
+        let paths = paths_for_test(&root);
+        let error = paths
+            .generation_switch_links("000124", "000123")
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock);
+        assert!(!root.join("previous").exists());
+        assert_eq!(
+            std::fs::read_link(root.join("current")).unwrap(),
+            Path::new("generations/000125")
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn generation_switch_removes_previous_when_there_is_no_current_generation() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_root();
+        let generations = root.join("generations");
+        std::fs::create_dir_all(generations.join("000123")).unwrap();
+        symlink("generations/old", root.join("previous")).unwrap();
+
+        let paths = paths_for_test(&root);
+        paths.generation_switch_links("000123", "").unwrap();
+
+        assert!(!root.join("previous").exists());
+        assert_eq!(
+            std::fs::read_link(root.join("current")).unwrap(),
+            Path::new("generations/000123")
+        );
 
         std::fs::remove_dir_all(root).unwrap();
     }
