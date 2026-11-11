@@ -19,9 +19,7 @@ fn generation_number(path: &Path) -> Option<u64> {
 fn parse_running_generation(contents: &[u8]) -> Option<String> {
     for line in contents.split(|byte| *byte == b'\n') {
         if let Some(generation) = line.strip_prefix(b"GENERATION=") {
-            if generation.len() != 6
-                || !generation.iter().all(u8::is_ascii_digit)
-            {
+            if generation.len() != 6 || !generation.iter().all(u8::is_ascii_digit) {
                 return None;
             }
             return String::from_utf8(generation.to_vec()).ok();
