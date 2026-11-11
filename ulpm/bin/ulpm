@@ -92,18 +92,19 @@ _path_add "$ULPM_BIN_DIR"
 _path_add "$HOME/.local/bin"
 export PATH
 
-# Standard XDG paths; rootless by design.
-export ULPM_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/ulpm"
-export ULPM_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/ulpm"
-export ULPM_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}/ulpm"
-export ULPM_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}/ulpm"
-export ULPM_APPS_DIR="$ULPM_DATA_HOME/apps"
-export ULPM_RUNTIMES_DIR="$ULPM_DATA_HOME/runtimes"
-export ULPM_KEYS_DIR="$ULPM_CONFIG_HOME/keys"
-export ULPM_OVERRIDES_DIR="$ULPM_CONFIG_HOME/overrides"
-export ULPM_DB="$ULPM_DATA_HOME/installed.db"
-export ULPM_LOCK_FILE="$ULPM_DATA_HOME/installed.db.lock"
-export ULPM_LOCK="$ULPM_LOCK_FILE"
+# Standard XDG paths; rootless by design. Pre-set ULPM_* paths win so a
+# system caller (bubbleOS) can keep repository keys and caches outside HOME.
+export ULPM_DATA_HOME="${ULPM_DATA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/ulpm}"
+export ULPM_CONFIG_HOME="${ULPM_CONFIG_HOME:-${XDG_CONFIG_HOME:-$HOME/.config}/ulpm}"
+export ULPM_CACHE_HOME="${ULPM_CACHE_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/ulpm}"
+export ULPM_STATE_HOME="${ULPM_STATE_HOME:-${XDG_STATE_HOME:-$HOME/.local/state}/ulpm}"
+export ULPM_APPS_DIR="${ULPM_APPS_DIR:-$ULPM_DATA_HOME/apps}"
+export ULPM_RUNTIMES_DIR="${ULPM_RUNTIMES_DIR:-$ULPM_DATA_HOME/runtimes}"
+export ULPM_KEYS_DIR="${ULPM_KEYS_DIR:-$ULPM_CONFIG_HOME/keys}"
+export ULPM_OVERRIDES_DIR="${ULPM_OVERRIDES_DIR:-$ULPM_CONFIG_HOME/overrides}"
+export ULPM_DB="${ULPM_DB:-$ULPM_DATA_HOME/installed.db}"
+export ULPM_LOCK_FILE="${ULPM_LOCK_FILE:-$ULPM_DATA_HOME/installed.db.lock}"
+export ULPM_LOCK="${ULPM_LOCK:-$ULPM_LOCK_FILE}"
 
 # Atomic directory creation with strict privacy on keychains and WAL.
 mkdir -p -- "$ULPM_DATA_HOME" "$ULPM_CONFIG_HOME" "$ULPM_CACHE_HOME" "$ULPM_STATE_HOME/wal" \
@@ -112,7 +113,7 @@ mkdir -p -- "$ULPM_DATA_HOME" "$ULPM_CONFIG_HOME" "$ULPM_CACHE_HOME" "$ULPM_STAT
 ( umask 077 && mkdir -p -- "$ULPM_KEYS_DIR" ) || _die 'Unable to create secure keys directory.'
 
 # Load modules in strict dependency order.
-for mod in utils crypto sandbox pack deb run stream manage repo deps transaction; do
+for mod in utils crypto sandbox pack deb run stream manage repo deps transaction store; do
     module="$ULPM_LIB_DIR/$mod.sh"
     if [[ ! -f "$module" && -f "$ULPM_LIB_DIR/${mod}" ]]; then
         module="$ULPM_LIB_DIR/${mod}"
@@ -174,10 +175,11 @@ Execution & Sandbox:
 Packaging & Distribution:
   pack [flags] <src> [name] [out.lpk] [ver]    Create a sealed LPK bundle (v5 format, 104B trailer)
   deb-pack <pkg|file.deb> [name]               Convert Debian (.deb) or APT package into an LPK
-  repo <list|add|remove|enable|disable|verify|index>
+  repo <list|add|remove|enable|disable|update|verify|packages|search|index>
                                                Manage signed repositories and static distribution
   deps <check|resolve> <app-id|manifest.json>  Validate dependencies / resolve installation plan
   transaction install <app-id> [app-id ...]    Atomic multi-package installation with WAL rollback
+  store <add|list|show|remove|gc|verify>       Manage the bubbleOS system package store
 
 Security & Maintenance:
   keygen [name]                                Generate an Ed25519 keypair
@@ -267,6 +269,7 @@ main() {
                           _dispatch cmd_deps deps "$@" ;;
         transaction|txn)
                           _dispatch cmd_transaction transaction "$@" ;;
+        store)            _dispatch cmd_store store "$@" ;;
         history)          _dispatch cmd_history history "$@" ;;
         rollback)         _dispatch cmd_rollback rollback "$@" ;;
         remove|-r|rm|uninstall)
