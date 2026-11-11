@@ -46,7 +46,6 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
             std::io::ErrorKind::InvalidInput,
             "invalid snapshot name",
         )
-        )
         .into());
     }
 
@@ -64,7 +63,6 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "no valid pending snapshot in marker",
-        )
         )
         .into());
     }
