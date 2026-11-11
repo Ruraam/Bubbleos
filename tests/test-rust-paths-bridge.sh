@@ -69,6 +69,10 @@ export -n BUBBLEOS_GENERATIONS_DIR BUBBLEOS_CURRENT_LINK BUBBLEOS_PREVIOUS_LINK
 
 # shellcheck disable=SC1091
 source "$ROOT/bubble/lib/paths.sh"
+# shellcheck disable=SC1091
+source "$ROOT/bubble/lib/system.sh"
+# shellcheck disable=SC1091
+source "$ROOT/bubble/lib/generation.sh"
 
 EXPECTED_CONFIG="$(printf '%s\n' \
     "$BUBBLEOS_NAME" "$BUBBLEOS_VERSION" "$BUBBLEOS_CHANNEL" \
@@ -92,5 +96,12 @@ assert_rust_call require-root bubble_require_root
 assert_rust_call require-generation bubble_require_generation_layout
 assert_rust_call require-snapshots bubble_require_snapshots_layout
 assert_rust_call init bubble_init_paths
+assert_rust_call system-init bubble_system_init
+assert_rust_call root-subvol bubble_system_root_subvol
+assert_rust_call root-fstype bubble_system_root_fstype
+assert_rust_call ulpm-version bubble_ulpm_version
+assert_rust_call lpk-format-version bubble_lpk_format_version
+assert_rust_call generation-current bubble_generation_current
+assert_rust_call generation-previous bubble_generation_previous
 
 printf 'Rust path bridge: OK\n'
