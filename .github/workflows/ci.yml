@@ -101,6 +101,10 @@ jobs:
         if: steps.rust-workspace.outputs.present == 'true'
         run: cargo build --offline --locked --workspace --all-targets --all-features
 
+      - name: Verify repository helper parity
+        if: steps.rust-workspace.outputs.present == 'true'
+        run: bash tests/test-rust-repo-parity.sh target/debug/bubble-paths
+
       - name: Verify Limine renderer shell parity
         if: steps.rust-workspace.outputs.present == 'true'
         run: bash tests/test-limine-render-parity.sh
@@ -127,6 +131,7 @@ jobs:
         run: |
           rustc --version
           cargo build --offline --locked --release --workspace --all-targets --all-features
+          bash tests/test-rust-repo-parity.sh target/release/bubble-paths
           cargo test --offline --locked --workspace --all-features
           bash tests/test-limine-render-parity.sh target/release/bubble-paths
           target/release/bubble-paths require-root
