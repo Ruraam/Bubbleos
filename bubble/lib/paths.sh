@@ -23,9 +23,34 @@
 : "${BUBBLEOS_CURRENT_LINK:=${BUBBLEOS_ROOTFS_MOUNT}/current}"
 : "${BUBBLEOS_PREVIOUS_LINK:=${BUBBLEOS_ROOTFS_MOUNT}/previous}"
 
+# Pass shell configuration explicitly: bubble.conf is sourced, not exported.
+bubble_rust_paths() {
+    env \
+        BUBBLEOS_NAME="$BUBBLEOS_NAME" \
+        BUBBLEOS_VERSION="$BUBBLEOS_VERSION" \
+        BUBBLEOS_CHANNEL="$BUBBLEOS_CHANNEL" \
+        BUBBLEOS_STATE_DIR="$BUBBLEOS_STATE_DIR" \
+        BUBBLEOS_CONFIG_DIR="$BUBBLEOS_CONFIG_DIR" \
+        BUBBLEOS_CACHE_DIR="$BUBBLEOS_CACHE_DIR" \
+        BUBBLEOS_RUN_DIR="$BUBBLEOS_RUN_DIR" \
+        BUBBLEOS_ULPM_DIR="$BUBBLEOS_ULPM_DIR" \
+        BUBBLEOS_ULPM_CONFIG_DIR="$BUBBLEOS_ULPM_CONFIG_DIR" \
+        BUBBLEOS_ULPM_CACHE_DIR="$BUBBLEOS_ULPM_CACHE_DIR" \
+        BUBBLEOS_ROOTFS_MOUNT="$BUBBLEOS_ROOTFS_MOUNT" \
+        BUBBLEOS_STORE_DIR="$BUBBLEOS_STORE_DIR" \
+        BUBBLEOS_STORE_OBJECTS_DIR="$BUBBLEOS_STORE_OBJECTS_DIR" \
+        BUBBLEOS_STORE_PACKAGES_DIR="$BUBBLEOS_STORE_PACKAGES_DIR" \
+        BUBBLEOS_BOOT_ASSETS_DIR="$BUBBLEOS_BOOT_ASSETS_DIR" \
+        BUBBLEOS_SNAPSHOTS_DIR="$BUBBLEOS_SNAPSHOTS_DIR" \
+        BUBBLEOS_GENERATIONS_DIR="$BUBBLEOS_GENERATIONS_DIR" \
+        BUBBLEOS_CURRENT_LINK="$BUBBLEOS_CURRENT_LINK" \
+        BUBBLEOS_PREVIOUS_LINK="$BUBBLEOS_PREVIOUS_LINK" \
+        "$BUBBLEOS_RUST_PATHS_BIN" "$@"
+}
+
 bubble_require_root() {
     if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
-        "$BUBBLEOS_RUST_PATHS_BIN" require-root
+        bubble_rust_paths require-root
         return $?
     fi
 
@@ -37,7 +62,7 @@ bubble_require_root() {
 
 bubble_require_generation_layout() {
     if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
-        "$BUBBLEOS_RUST_PATHS_BIN" require-generation
+        bubble_rust_paths require-generation
         return $?
     fi
 
@@ -59,7 +84,7 @@ bubble_require_generation_layout() {
 
 bubble_require_snapshots_layout() {
     if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
-        "$BUBBLEOS_RUST_PATHS_BIN" require-snapshots
+        bubble_rust_paths require-snapshots
         return $?
     fi
 
@@ -72,7 +97,7 @@ bubble_require_snapshots_layout() {
 
 bubble_init_paths() {
     if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
-        "$BUBBLEOS_RUST_PATHS_BIN" init
+        bubble_rust_paths init
         return $?
     fi
 
