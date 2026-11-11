@@ -4,15 +4,16 @@
 //! preflight checks to this binary when it is installed. It remains optional
 //! in source checkouts so an incomplete build never breaks the old path.
 
-use bubble_core::{require_root, system, BubblePaths};
+use bubble_core::{bootloader, require_root, system, BubblePaths};
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process;
 
-const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|status>";
+const USAGE: &str = "Usage: bubble-paths <require-root|init|require-generation|require-snapshots|system-init|root-subvol|root-fstype|ulpm-version|lpk-format-version|generation-current|generation-previous|generation-running|generation-list|generation-next|generation-exists <number>|snapshot-valid-name <name>|snapshot-pending-from-file <path>|snapshot-pending-path|snapshot-pending|snapshot-list|bootloader-render <generations-dir> <root-uuid> <current> <previous>|status>";
 
-fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
+fn run(command: &str, arguments: &[OsString]) -> Result<(), Box<dyn Error>> {
+    let argument = arguments.first().map(OsString::as_os_str);
     let paths = BubblePaths::from_env();
 
     if command == "generation-exists" {
@@ -141,6 +142,26 @@ fn run(command: &str, argument: Option<&OsStr>) -> Result<(), Box<dyn Error>> {
                 println!("{snapshot}");
             }
         }
+        "bootloader-render" => {
+            let values = arguments
+                .iter()
+                .map(|value| value.to_str())
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "bootloader arguments must be valid UTF-8",
+                    )
+                })?;
+            let rendered = bootloader::render_config(
+                Path::new(values[0]),
+                values[1],
+                values[2],
+                values[3],
+                &bootloader::LimineRenderOptions::default(),
+            );
+            print!("{rendered}");
+        }
         "status" => print!("{}", system::status_report(&paths)),
         _ => {
             return Err(std::io::Error::new(
@@ -164,24 +185,19 @@ fn main() {
             process::exit(2);
         }
     };
+    let arguments: Vec<OsString> = args.collect();
 
-    let argument = args.next();
-
-    if args.next().is_some() {
+    let expected_arguments = match command.as_str() {
+        "generation-exists" | "snapshot-valid-name" | "snapshot-pending-from-file" => 1,
+        "bootloader-render" => 4,
+        _ => 0,
+    };
+    if arguments.len() != expected_arguments {
         eprintln!("{USAGE}");
         process::exit(2);
     }
 
-    let command_accepts_argument = matches!(
-        command.as_str(),
-        "generation-exists" | "snapshot-valid-name" | "snapshot-pending-from-file"
-    );
-    if !command_accepts_argument && argument.is_some() {
-        eprintln!("{USAGE}");
-        process::exit(2);
-    }
-
-    if let Err(error) = run(&command, argument.as_deref()) {
+    if let Err(error) = run(&command, &arguments) {
         eprintln!("{error}");
         process::exit(1);
     }
