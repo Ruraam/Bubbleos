@@ -14,6 +14,16 @@ from common import (
     workdir,
 )
 
+GEN_ROOT = "/var/lib/bubbleos/rootfs/generations"
+
+
+def run_rc(vm, command):
+    """Run a guest command and return (output, exit status line)."""
+    output = vm.run(f"{command} 2>&1; echo rc=$?")
+    lines = output.splitlines()
+    status = lines[-1] if lines else ""
+    return output, status
+
 
 def main() -> None:
     require_commands("qemu-system-x86_64", "cp")
@@ -287,6 +297,143 @@ def main() -> None:
                     "no systemd unit failed across generation switches",
                     "0 loaded units listed" in failed,
                     failed,
+                )
+            )
+
+            protected, status = run_rc(
+                vm, "bubble generation delete 000001"
+            )
+            checks.append(
+                (
+                    "the current and running generation cannot be deleted",
+                    status == "rc=1"
+                    and "current generation" in protected
+                    and "running generation" in protected,
+                    protected,
+                )
+            )
+            protected, status = run_rc(
+                vm, "bubble generation delete 000002"
+            )
+            checks.append(
+                (
+                    "the previous generation cannot be deleted",
+                    status == "rc=1" and "previous generation" in protected,
+                    protected,
+                )
+            )
+
+            created = vm.run(
+                "bubble generation create --description 'delete test'"
+            )
+            checks.append(
+                (
+                    "delete test creates generation 000003",
+                    "Created generation 000003" in created,
+                    created,
+                )
+            )
+            vm.run(
+                "printf 'delete-test-initramfs\\n' >> "
+                f"{GEN_ROOT}/000003/usr/lib/bubbleos/boot/initramfs.cpio.gz && "
+                "bubble bootloader sync"
+            )
+            staged = vm.run(
+                "test -s /boot/generations/000003/initramfs.cpio.gz "
+                "&& echo staged"
+            )
+            checks.append(
+                (
+                    "the delete candidate has private ESP assets",
+                    staged == "staged",
+                    staged,
+                )
+            )
+
+            deleted, status = run_rc(vm, "bubble generation delete 000003")
+            cleaned = vm.run(
+                f"test ! -d {GEN_ROOT}/000003 && echo subvol-gone; "
+                "test ! -d /boot/generations/000003 && echo esp-clean; "
+                "grep -q 'generation 000003' /boot/limine.conf "
+                "&& echo menu-stale || echo menu-clean"
+            )
+            checks.append(
+                (
+                    "delete removes the generation, its ESP assets and menu entry",
+                    "Deleted generation 000003" in deleted
+                    and status == "rc=0"
+                    and "subvol-gone" in cleaned
+                    and "esp-clean" in cleaned
+                    and "menu-clean" in cleaned,
+                    deleted + "\n" + cleaned,
+                )
+            )
+
+            # Deleting the newest generation lets the numbering reuse 000003.
+            vm.run(
+                "bubble generation create --description 'prune three' && "
+                "printf 'prune-three-initramfs\\n' >> "
+                f"{GEN_ROOT}/000003/usr/lib/bubbleos/boot/initramfs.cpio.gz && "
+                "bubble bootloader sync"
+            )
+            staged = vm.run(
+                "test -s /boot/generations/000003/initramfs.cpio.gz "
+                "&& echo staged"
+            )
+            checks.append(
+                (
+                    "the prune candidate has private ESP assets",
+                    staged == "staged",
+                    staged,
+                )
+            )
+            vm.run("bubble generation create --description 'prune four'")
+            vm.run("bubble generation create --description 'prune five'")
+
+            dry_run, status = run_rc(
+                vm, "bubble generation prune --keep 2 --dry-run"
+            )
+            kept = vm.run(
+                f"test -d {GEN_ROOT}/000003 && echo kept"
+            )
+            checks.append(
+                (
+                    "prune dry-run reports the old generation and deletes nothing",
+                    status == "rc=0"
+                    and "would delete generation 000003" in dry_run
+                    and "would delete generation 000004" not in dry_run
+                    and "would delete generation 000005" not in dry_run
+                    and kept == "kept",
+                    dry_run + "\n" + kept,
+                )
+            )
+
+            pruned, status = run_rc(
+                vm, "bubble generation prune --keep 2"
+            )
+            state = vm.run(
+                f"test ! -d {GEN_ROOT}/000003 && echo three-gone; "
+                f"test -d {GEN_ROOT}/000004 && echo four-kept; "
+                f"test -d {GEN_ROOT}/000005 && echo five-kept; "
+                f"test -d {GEN_ROOT}/000001 && echo current-kept; "
+                f"test -d {GEN_ROOT}/000002 && echo previous-kept; "
+                "test ! -d /boot/generations/000003 && echo esp-clean"
+            )
+            menu = vm.run("grep '^/bubbleOS' /boot/limine.conf")
+            checks.append(
+                (
+                    "prune deletes old generations and their ESP assets",
+                    status == "rc=0"
+                    and "Deleted generation 000003" in pruned
+                    and "Deleted generation 000004" not in pruned
+                    and "three-gone" in state
+                    and "four-kept" in state
+                    and "five-kept" in state
+                    and "current-kept" in state
+                    and "previous-kept" in state
+                    and "esp-clean" in state
+                    and "generation 000003" not in menu,
+                    pruned + "\n" + state + "\n" + menu,
                 )
             )
     finally:

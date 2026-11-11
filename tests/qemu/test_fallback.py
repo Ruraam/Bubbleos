@@ -72,7 +72,7 @@ def main() -> None:
         with boot(
             name="fallback-missing",
             root_image=disk,
-            root_device="/dev/vda2",
+            root_device="/dev/vda3",
             append_extra="rootflags=subvol=@rootfs/generations/999999",
         ) as vm:
             vm.login()

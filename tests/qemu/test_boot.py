@@ -37,6 +37,15 @@ def main() -> None:
                 )
             )
 
+            version = vm.run("cat /proc/version")
+            checks.append(
+                (
+                    "kernel reports the imported release in /proc/version",
+                    expected_release is None or expected_release in version,
+                    version,
+                )
+            )
+
             cmdline = vm.run("cat /proc/cmdline")
             checks.append(
                 (
@@ -157,6 +166,24 @@ def main() -> None:
             modprobe = vm.run("modprobe autofs4; echo rc=$?")
             checks.append(
                 ("modprobe autofs4 succeeds", "rc=0" in modprobe, modprobe)
+            )
+
+            htop = vm.run(
+                "if command -v htop >/dev/null 2>&1 && "
+                "htop --version 2>/dev/null | grep -q '^htop ' && "
+                "grep -q '^color_scheme=5$' /root/.config/htop/htoprc "
+                "2>/dev/null && "
+                "grep -q '^color_scheme=5$' /home/bubble/.config/htop/htoprc "
+                "2>/dev/null && "
+                "grep -q '^color_scheme=5$' /etc/skel/.config/htop/htoprc "
+                "2>/dev/null; then echo ok; else echo fail; fi"
+            )
+            checks.append(
+                (
+                    "htop is installed with the bubbleOS black-night palette",
+                    htop.strip() == "ok",
+                    htop,
+                )
             )
 
             failed = vm.run("systemctl --failed --no-pager")

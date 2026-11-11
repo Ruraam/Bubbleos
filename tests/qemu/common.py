@@ -23,7 +23,8 @@ BOOT_TIMEOUT = int(os.environ.get("BOOT_TIMEOUT", "420"))
 CMD_TIMEOUT = int(os.environ.get("CMD_TIMEOUT", "120"))
 POWEROFF_TIMEOUT = int(os.environ.get("POWEROFF_TIMEOUT", "120"))
 
-ESP_OFFSET = int(os.environ.get("ESP_OFFSET", str(1024 * 1024)))
+# Partition 1 is the 1 MiB BIOS boot partition, so the ESP starts at 2 MiB.
+ESP_OFFSET = int(os.environ.get("ESP_OFFSET", str(2 * 1024 * 1024)))
 ESP_SIZE = os.environ.get("ESP_SIZE", "128M")
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07")
@@ -185,6 +186,7 @@ def boot(
     root_image: Path | None = None,
     root_device: str = "UUID=b0bb1e05-4a2d-4f00-9000-000000000001",
     append_extra: str = "",
+    uefi: bool = True,
 ) -> VM:
     if disk_image is not None and root_image is not None:
         raise ValueError("use either disk_image or root_image, not both")
@@ -195,7 +197,7 @@ def boot(
     log_path = LOG_DIR / f"{name}.log"
     env_items = []
     if disk_image is not None:
-        env_items.append(f"DISK_IMAGE={disk_image}")
+        env_items.extend([f"DISK_IMAGE={disk_image}", f"UEFI={1 if uefi else 0}"])
     if root_image is not None:
         env_items.extend(
             [
