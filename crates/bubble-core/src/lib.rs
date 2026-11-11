@@ -12,6 +12,7 @@ pub mod bootloader;
 pub mod generations;
 pub mod repo;
 pub mod snapshots;
+pub mod store;
 pub mod system;
 
 /// Centralized BubbleOS filesystem layout.
