@@ -178,7 +178,7 @@ mod tests {
         let root = temp_root();
         std::fs::create_dir_all(&root).unwrap();
         let marker = root.join("request");
-        std::fs::write(&marker, b"COMMENT=\\xff\\nSNAPSHOT=valid-name\\n").unwrap();
+        std::fs::write(&marker, b"COMMENT=\xff\nSNAPSHOT=valid-name\n").unwrap();
 
         let paths = paths_for_test(&root);
         assert_eq!(
