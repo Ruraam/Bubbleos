@@ -168,12 +168,9 @@ impl BubblePaths {
             }
         }
 
-        version_sort_last(&versions)?.ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("package has no stored versions: {package_id}"),
-            )
-        })
+        // The shell helper returns success with an empty line when a
+        // package directory exists but contains no version symlinks.
+        Ok(version_sort_last(&versions)?.unwrap_or_default())
     }
 
     /// Inspect an installed package selector (ID or ID=version).
@@ -344,6 +341,15 @@ mod tests {
         assert_eq!(paths.store_latest_version("demo").unwrap(), "1.10");
         assert!(paths.store_latest_version("../demo").is_err());
 
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn existing_package_directory_without_links_returns_an_empty_version() {
+        let root = temp_root();
+        std::fs::create_dir_all(root.join("packages/demo")).unwrap();
+        let paths = paths_for_test(&root);
+        assert_eq!(paths.store_latest_version("demo").unwrap(), "");
         std::fs::remove_dir_all(root).unwrap();
     }
 
