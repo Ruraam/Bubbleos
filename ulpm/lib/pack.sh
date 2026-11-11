@@ -598,16 +598,18 @@ cmd_pack() {
 
     mkdir -p -- "$build_stage/meta" "$build_stage/root" || { _cleanup_pack_stage; return 1; }
 
-    # [ULPM v6.1] Rootfs detection: changes entrypoint mode and skips bundler
+    log "Extracting assets from $src..."
+    extract_any_payload "$src" "$build_stage/root" || { _cleanup_pack_stage; return 1; }
+
+    # [ULPM v6.1] Rootfs detection: changes entrypoint mode and skips the
+    # application library bundler. It must run after extraction so a raw
+    # directory containing etc/ and usr/ is recognized as a system payload.
     local is_rootfs_payload=false
     if [[ -d "$build_stage/root/etc" && -d "$build_stage/root/usr" ]] || \
        [[ -d "$build_stage/root/root/etc" && -d "$build_stage/root/root/usr" ]]; then
         is_rootfs_payload=true
         info "RootFS payload detected (etc/ + usr/)."
     fi
-
-    log "Extracting assets from $src..."
-    extract_any_payload "$src" "$build_stage/root" || { _cleanup_pack_stage; return 1; }
 
     local detected_exec="" f
     # [ULPM v6.1] Absolute priority: launch.sh inside a rootfs

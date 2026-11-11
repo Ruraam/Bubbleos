@@ -158,6 +158,8 @@ _repo_verify_index() {
             (.arch | type == "string" and test("^(x86_64|amd64|aarch64|arm64|armhf|armv7l|armv7|i386|i686|riscv64|ppc64le|s390x|loongarch64|all|any)$")) and
             (.file | type == "string" and test("^[A-Za-z0-9._+-]+\\.lpk$") and (contains("..") | not)) and
             (.sha256 | test("^[0-9a-f]{64}$")) and
+            (((.type // "app") | type == "string" and
+                test("^[A-Za-z][A-Za-z0-9._-]{0,63}$"))) and
             ((.dependencies // []) | type == "array") and
             ((.runtime // null) | type == "string" or type == "null") and
             ((.runtime_abi // null) | type == "string" or type == "null") and
@@ -201,7 +203,7 @@ repo_build_and_sign_index() {
     }
 
     local packages='[]' pkg manifest id name version arch file hash desc deps \
-        runtime runtime_abi abi
+        type runtime runtime_abi abi
     shopt -s nullglob
     local lpk_files=("$dir"/*.lpk)
     shopt -u nullglob
@@ -224,6 +226,7 @@ repo_build_and_sign_index() {
         arch="$(jq -r '.arch // "all"' <<< "$manifest")"
         desc="$(jq -r '.description // ""' <<< "$manifest")"
         deps="$(jq -c '.dependencies // []' <<< "$manifest")"
+        type="$(jq -r '.type // .kind // "app"' <<< "$manifest")"
         runtime="$(jq -r '.runtime // ""' <<< "$manifest")"
         runtime_abi="$(jq -r '.runtime_abi // ""' <<< "$manifest")"
         abi="$(jq -r '.abi // ""' <<< "$manifest")"
@@ -242,13 +245,14 @@ repo_build_and_sign_index() {
         packages="$(jq -c \
             --arg id "$id" --arg name "$name" --arg version "$version" \
             --arg arch "$arch" --arg file "$file" --arg sha256 "$hash" \
-            --arg description "$desc" --argjson dependencies "$deps" \
+            --arg description "$desc" --arg type "$type" \
+            --argjson dependencies "$deps" \
             --arg runtime "$runtime" --arg runtime_abi "$runtime_abi" \
             --arg abi "$abi" \
             '. + [{
                 id: $id, name: $name, version: $version, arch: $arch,
                 file: $file, sha256: $sha256, description: $description,
-                dependencies: $dependencies,
+                type: $type, dependencies: $dependencies,
                 runtime: (if $runtime == "" then null else $runtime end),
                 runtime_abi: (if $runtime_abi == "" then null else $runtime_abi end),
                 abi: (if $abi == "" then null else $abi end)
@@ -288,6 +292,70 @@ repo_build_and_sign_index() {
     fi
     sync_dir "$dir" 2>/dev/null || true
     return 0
+}
+
+# ==============================================================================
+# Verified repository catalogue
+#
+# These helpers are the machine interface used by bubbleOS system upgrades.
+# Only enabled repositories whose cached index still verifies against the
+# pinned Ed25519 key are exposed; the verified index, not the working tree,
+# is authoritative for versions and SHA-256 digests.
+# ==============================================================================
+
+# Prints a JSON array of every package in every enabled, verified repository.
+# Each entry is augmented with `repository` and `base_url` so a caller can
+# download the payload without re-reading repository configuration.
+repo_collect_packages() {
+    local only="${1:-}" root f name cfg key cache base
+    root="$(_repo_cache_root)"
+    [[ -d "$root" ]] || {
+        printf '[]\n'
+        return 0
+    }
+
+    local all='[]' added
+    shopt -s nullglob
+    local indexes=("$root"/*/index.json)
+    shopt -u nullglob
+    for f in "${indexes[@]}"; do
+        name="$(basename -- "$(dirname -- "$f")")"
+        [[ -z "$only" || "$only" == "$name" ]] || continue
+        cfg="$(_repo_config "$name")"
+        key="$(_repo_key "$name")"
+        cache="$(_repo_cache "$name")"
+        [[ -f "$cfg" && -f "$key" ]] || continue
+        [[ "$(jq -r '.enabled // true' "$cfg" 2>/dev/null)" == true ]] || continue
+        if ! _repo_verify_index "$name" "$f" "$cache/index.json.sig" "$key" \
+            >/dev/null 2>&1; then
+            warn "Ignoring repository '$name': cached index verification failed."
+            continue
+        fi
+
+        base=""
+        if [[ -f "$cache/base-url" ]]; then
+            base="$(head -n 1 "$cache/base-url" | tr -d '\r\n')"
+        fi
+        [[ -n "$base" ]] || base="$(jq -r '.url // empty' "$cfg" 2>/dev/null || true)"
+        [[ -n "$base" ]] || continue
+
+        added="$(jq -c --arg repo "$name" --arg base "$base" '
+            .packages | map(. + {repository: $repo, base_url: $base})
+        ' "$f" 2>/dev/null)" || continue
+        all="$(jq -c --argjson add "$added" '. + $add' <<< "$all")" || return 1
+    done
+    jq -S 'sort_by(.repository, .id, .version)' <<< "$all"
+}
+
+# TSV iterator kept for the application installer in manage.sh:
+# repository, id, name, version, arch, file, sha256, base_url, description
+repo_iter_packages() {
+    local data
+    data="$(repo_collect_packages)" || return 1
+    jq -r '
+        .[] | [.repository, .id, .name, .version, .arch, .file,
+               .sha256, .base_url, (.description // "")] | @tsv
+    ' <<< "$data"
 }
 
 repo_search_entries() {
@@ -465,6 +533,51 @@ cmd_repo() {
             done
             (( failures == 0 )) || return 1
             ;;
+        packages|list-packages)
+            local only_packages="" json=0 data
+            while (( $# )); do
+                case "$1" in
+                    --json)
+                        json=1
+                        shift
+                        ;;
+                    --repo)
+                        [[ $# -ge 2 ]] || {
+                            error 'repo packages --repo requires a repository name'
+                            return 2
+                        }
+                        only_packages="$2"
+                        shift 2
+                        ;;
+                    --repo=*)
+                        only_packages="${1#*=}"
+                        shift
+                        ;;
+                    *)
+                        error "Unknown repo packages option: $1"
+                        return 2
+                        ;;
+                esac
+            done
+            [[ -z "$only_packages" ]] || _repo_name_ok "$only_packages" || {
+                error "Invalid repository name: $only_packages"
+                return 2
+            }
+            check_dependencies jq || return 1
+            data="$(repo_collect_packages "$only_packages")" || return 1
+            if (( json )); then
+                printf '%s\n' "$data"
+            else
+                jq -r '
+                    .[] | [.repository, .id, .name, .version, .arch,
+                           (.type // "app")] | @tsv
+                ' <<< "$data" |
+                    while IFS=$'\t' read -r p_repo p_id p_name p_version p_arch p_type; do
+                        printf '%-18s %-32s %-24s %-12s %-8s %s\n' \
+                            "$p_repo" "$p_id" "$p_name" "$p_version" "$p_arch" "$p_type"
+                    done
+            fi
+            ;;
         update|refresh)
             local only="${1:-}" root f name url cache index_tmp sig_tmp
             root="$(_repo_root)"; mkdir -p -- "$root" "$(_repo_cache_root)"
@@ -592,7 +705,7 @@ cmd_repo() {
             fi
             ;;
         *)
-            error 'Usage: ulpm repo <list|add|remove|enable|disable|update|verify|search|install|index> ...'
+            error 'Usage: ulpm repo <list|add|remove|enable|disable|update|verify|packages|search|install|index> ...'
             return 2
             ;;
     esac

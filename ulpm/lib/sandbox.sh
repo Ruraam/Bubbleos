@@ -649,6 +649,9 @@ lpk_run_isolated() {
         return 1
     fi
     shift || true
+    # cmd_run forwards application arguments as `target -- args...`; consume
+    # the separator so the application does not receive a literal `--`.
+    [[ "${1:-}" == "--" ]] && shift
 
     target="$(normalize_target "$target")"
 
