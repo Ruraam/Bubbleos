@@ -28,7 +28,12 @@ impl BubblePaths {
     /// when the shell implementation would reject it.
     pub fn snapshot_pending_from_file(&self, marker: &std::path::Path) -> Option<String> {
         let contents = std::fs::read_to_string(marker).ok()?;
-        for line in contents.split_terminator('\n') {
+        for complete_line in contents.split_inclusive('\n') {
+            let Some(line) = complete_line.strip_suffix('\n') else {
+                // Bash's "while read" loop does not process an unterminated
+                // final line because read returns failure at EOF.
+                continue;
+            };
             if let Some(name) = line.strip_prefix("SNAPSHOT=") {
                 return snapshot_valid_name(name).then(|| name.to_owned());
             }
@@ -160,6 +165,19 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let marker = root.join("request");
         std::fs::write(&marker, "SNAPSHOT=../escape\nSNAPSHOT=valid\n").unwrap();
+
+        let paths = paths_for_test(&root);
+        assert_eq!(paths.snapshot_pending_from_file(&marker), None);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pending_marker_ignores_an_unterminated_final_line_like_bash() {
+        let root = temp_root();
+        std::fs::create_dir_all(&root).unwrap();
+        let marker = root.join("request");
+        std::fs::write(&marker, "SNAPSHOT=valid-name").unwrap();
 
         let paths = paths_for_test(&root);
         assert_eq!(paths.snapshot_pending_from_file(&marker), None);
