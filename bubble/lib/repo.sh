@@ -246,6 +246,10 @@ bubble_trust() {
 # ------------------------------------------------------------------------------
 
 bubble_arch() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        bubble_rust_paths arch
+        return $?
+    fi
     case "$(uname -m)" in
         x86_64|amd64) printf 'amd64\n' ;;
         aarch64|arm64) printf 'arm64\n' ;;
@@ -258,6 +262,17 @@ bubble_arch() {
 # Returns 0 when equal, 1 when the first version is greater and 2 when it is
 # lower. This mirrors ULPM's pure-Bash semantic version comparison.
 bubble_version_compare() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        local result
+        result="$(bubble_rust_paths version-compare "${1:-0}" "${2:-0}")" || return $?
+        case "$result" in
+            0|1|2) return "$result" ;;
+            *)
+                printf 'bubble: invalid Rust version comparison result: %s\\n' "$result" >&2
+                return 3
+                ;;
+        esac
+    fi
     local v1="${1:-0}" v2="${2:-0}"
     [[ "$v1" == "$v2" ]] && return 0
     v1="${v1#*:}"
@@ -304,6 +319,12 @@ bubble_version_compare() {
 }
 
 bubble_version_matches() {
+    if [[ -x "$BUBBLEOS_RUST_PATHS_BIN" ]]; then
+        local result
+        result="$(bubble_rust_paths version-matches "${1:-0}" "${2:-}")" || return $?
+        [[ "$result" == "true" ]]
+        return $?
+    fi
     local version="$1" constraint="${2:-}"
     [[ -z "$constraint" || "$constraint" == "all" || "$constraint" == "*" ]] &&
         return 0
