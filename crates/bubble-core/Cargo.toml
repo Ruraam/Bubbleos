@@ -9,6 +9,7 @@ license = "GPL-3.0-or-later"
 [lib]
 name = "bubble_core"
 path = "src/lib.rs"
+
 [[bin]]
 name = "bubble-paths"
 path = "src/bin/bubble-paths.rs"
