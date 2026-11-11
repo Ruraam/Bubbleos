@@ -121,9 +121,18 @@ fn generation_asset_digest(
     generation: &str,
     options: &LimineRenderOptions,
 ) -> Option<String> {
+    // The shell concatenates GENERATIONS_DIR/ID with the absolute-looking
+    // asset path; strip its leading slash rather than letting Path::join
+    // reset the path to the host filesystem root.
+    let assets_relative = PathBuf::from(
+        options
+            .boot_assets_dir
+            .to_string_lossy()
+            .trim_start_matches('/'),
+    );
     let assets = generations_dir
         .join(generation)
-        .join(&options.boot_assets_dir);
+        .join(assets_relative);
     let kernel = assets.join("vmlinuz");
     let initramfs = assets.join("initramfs.cpio.gz");
 
