@@ -1,8 +1,8 @@
 //! Shared, dependency-free system primitives for BubbleOS.
 //!
-//! This crate deliberately starts with path configuration only. The existing
-//! shell implementation remains authoritative until parity and integration
-//! tests prove that a Rust replacement is safe.
+//! The crate owns shared path configuration, system preflight checks, and
+//! read-only host information. Mutating boot and generation operations remain
+//! in the legacy shell code until equivalent integration tests are available.
 
 use std::ffi::OsString;
 use std::io;
