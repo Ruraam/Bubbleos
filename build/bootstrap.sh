@@ -46,6 +46,8 @@ DESKTOP_PACKAGES="${DESKTOP_PACKAGES:-wayfire wayfire-plugin-winshadows wstroke 
 # bubble-settings is a native GTK3 control center built inside the target
 # chroot before APT is removed. BUILD_SETTINGS follows DESKTOP by default.
 BUILD_SETTINGS="${BUILD_SETTINGS:-$DESKTOP}"
+# Compile the dependency-free Rust core for the target RootFS.
+BUILD_RUST_CORE="${BUILD_RUST_CORE:-1}"
 KERNEL_ENV="${KERNEL_ENV:-$BUILD_DIR/kernel/kernel.env}"
 if [[ -r "$KERNEL_ENV" ]]; then
     # shellcheck disable=SC1090
@@ -71,6 +73,8 @@ need() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; 
 [[ "$DESKTOP" == "0" || "$DESKTOP" == "1" ]] || die "DESKTOP must be 0 or 1"
 [[ "$BUILD_SETTINGS" == "0" || "$BUILD_SETTINGS" == "1" ]] ||
     die "BUILD_SETTINGS must be 0 or 1"
+[[ "$BUILD_RUST_CORE" == "0" || "$BUILD_RUST_CORE" == "1" ]] ||
+    die "BUILD_RUST_CORE must be 0 or 1"
 [[ "$BUILD_SETTINGS" == "0" || "$DESKTOP" == "1" ]] ||
     die "BUILD_SETTINGS=1 requires DESKTOP=1"
 [[ "$HARDWARE_USERSPACE" == "0" || "$HARDWARE_USERSPACE" == "1" ]] ||
@@ -288,6 +292,54 @@ find "$ROOTFS/usr/share/backgrounds/bubbleos" -type f -exec chmod 0644 {} +
 find "$ROOTFS/usr/share/bubbleos" -type f -exec chmod 0644 {} +
 find "$ROOTFS/usr/share/fonts/truetype/orbitron" -type f -exec chmod 0644 {} +
 find "$ROOTFS/usr/share/wayland-sessions" -type f -exec chmod 0644 {} +
+
+# ------------------------------------------------------------------------------
+# bubble-core (Rust system path helper)
+# ------------------------------------------------------------------------------
+# Build on the target RootFS, not on the host. This keeps the binary compatible
+# with the target architecture and glibc. Cargo and rustc are temporary
+# build-dependencies and are removed before APT itself is purged.
+if [[ "$BUILD_RUST_CORE" == "1" ]]; then
+    log "Building bubble-paths in the target RootFS"
+    rust_src="$ROOTFS/usr/src/bubbleos/rust"
+    install -d -m 0755 "$rust_src"
+    cp -a "$ROOT/Cargo.toml" "$ROOT/crates" "$rust_src/"
+    if [[ -f "$ROOT/Cargo.lock" ]]; then
+        cp -a "$ROOT/Cargo.lock" "$rust_src/Cargo.lock"
+    fi
+    rm -rf "$rust_src/target"
+    chown -R root:root "$rust_src"
+
+    chroot "$ROOTFS" sh -c \
+        'apt-mark showauto 2>/dev/null | xargs -r apt-mark manual >/dev/null 2>&1 || true'
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get update -qq
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y -qq --no-install-recommends rustc cargo
+
+    chroot "$ROOTFS" cargo build --offline --release \
+        --manifest-path /usr/src/bubbleos/rust/Cargo.toml \
+        --bin bubble-paths
+
+    install -d -m 0755 "$ROOTFS/usr/lib/bubbleos/bin"
+    install -m 0755 \
+        "$rust_src/target/release/bubble-paths" \
+        "$ROOTFS/usr/lib/bubbleos/bin/bubble-paths"
+    rm -rf "$rust_src"
+
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get purge -y -qq rustc cargo
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get autoremove -y -qq --purge
+
+    if chroot "$ROOTFS" sh -c \
+        'command -v rustc >/dev/null 2>&1 || command -v cargo >/dev/null 2>&1'; then
+        die "the Rust build toolchain is still present in the target RootFS"
+    fi
+    chroot "$ROOTFS" /usr/lib/bubbleos/bin/bubble-paths require-root ||
+        die "the installed bubble-paths binary cannot run in the target RootFS"
+    log "bubble-paths installed (Rust toolchain removed)"
+fi
 
 # ------------------------------------------------------------------------------
 # bubble-settings (native GTK3 control center)
