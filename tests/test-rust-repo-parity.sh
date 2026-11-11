@@ -96,11 +96,10 @@ constraints=(
     "1.2.0 <1.3.0"
     "1.2.0 1.2.1"
     "1.2.0 all"
-    "1.2.0 '*"
+    "1.2.0 *"
 )
 for pair in "${constraints[@]}"; do
     read -r version constraint <<< "$pair"
-    constraint="${constraint#\\'}"
     assert_match_parity "$version" "$constraint"
 done
 
@@ -118,7 +117,6 @@ for pair in "${versions[@]}"; do
 done
 for pair in "${constraints[@]}"; do
     read -r version constraint <<< "$pair"
-    constraint="${constraint#\\'}"
     assert_match_parity "$version" "$constraint"
 done
 PATH="$ORIGINAL_PATH"
