@@ -28,7 +28,8 @@ Without `--output`, the JSON document is written to stdout.
 
 - Local image analysis only; no network access or wallpaper upload.
 - Bounded input file size, decoded dimensions and downsampled analysis.
-- Deterministic color selection and semantic palette generation.
+- Deterministic five-cluster RGB analysis with chroma-aware subject selection.
+- Semantic palette generation with balanced, vivid and muted accent personalities.
 - Dark and light modes, balanced/vivid/muted palette personalities.
 - WCAG contrast calculation and readable foreground selection.
 - Versioned JSON output, independent of GTK, Qt and BubbleWM.
