@@ -1,0 +1,43 @@
+name: BubbleThemeEngine
+
+on:
+  push:
+    branches:
+      - main
+      - feature/bubble-theme-engine
+    paths:
+      - "theme-engine/**"
+      - ".github/workflows/theme-engine.yml"
+  pull_request:
+    paths:
+      - "theme-engine/**"
+      - ".github/workflows/theme-engine.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: theme-engine
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: theme-engine
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run tests
+        run: cargo test --all-targets
+      - name: Run Clippy
+        run: cargo clippy --all-targets -- -D warnings
