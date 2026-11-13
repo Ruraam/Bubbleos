@@ -144,10 +144,9 @@ pub fn generate_from_path(
     limits.max_image_width = Some(MAX_IMAGE_EDGE);
     limits.max_image_height = Some(MAX_IMAGE_EDGE);
     limits.max_alloc = Some(256 * 1024 * 1024);
-    let image = ImageReader::open(path)?
-        .with_guessed_format()?
-        .limits(limits)
-        .decode()?;
+    let mut reader = ImageReader::open(path)?.with_guessed_format()?;
+    reader.limits(limits);
+    let image = reader.decode()?;
 
     generate_from_image(
         &image,
