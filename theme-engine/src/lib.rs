@@ -3,7 +3,7 @@
 //! This crate is deliberately independent of any toolkit or compositor. It
 //! turns a local image into a stable, versioned set of semantic color tokens.
 
-use image::{DynamicImage, ImageReader, Limits};
+use image::{DynamicImage, GenericImageView, ImageReader, Limits};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
@@ -143,6 +143,7 @@ pub fn generate_from_path(
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_IMAGE_EDGE);
     limits.max_image_height = Some(MAX_IMAGE_EDGE);
+    limits.max_alloc = Some(256 * 1024 * 1024);
     let image = ImageReader::open(path)?
         .with_guessed_format()?
         .limits(limits)
