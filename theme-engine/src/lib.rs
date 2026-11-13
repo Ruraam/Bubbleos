@@ -257,7 +257,10 @@ fn dominant_color(pixels: &[(u8, u8, u8)]) -> Option<(u8, u8, u8)> {
             })
             .max_by(|(ia, da), (ib, db)| da.total_cmp(db).then_with(|| ib.cmp(ia)))?
             .0;
-        if centers.iter().any(|center| distance(*center, points[next]) == 0.0) {
+        if centers
+            .iter()
+            .any(|center| distance(*center, points[next]) == 0.0)
+        {
             break;
         }
         centers.push(points[next]);
@@ -606,9 +609,8 @@ mod tests {
             "wall.png",
         )
         .unwrap();
-        let saturation = |theme: &ThemeDocument| {
-            Hsl::from_rgb(parse_hex(&theme.colors.primary).unwrap()).s
-        };
+        let saturation =
+            |theme: &ThemeDocument| Hsl::from_rgb(parse_hex(&theme.colors.primary).unwrap()).s;
         assert!(saturation(&vivid) > saturation(&balanced));
         assert!(saturation(&balanced) > saturation(&muted));
     }
