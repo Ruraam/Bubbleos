@@ -221,6 +221,55 @@ pub fn generate_from_image(
 
 /// Deterministic, bounded k-means clustering in RGB space. Farthest-point
 /// seeding avoids random initialization and keeps output stable across runs.
+/// Convert gamma-encoded sRGB to perceptually uniform OKLab.
+fn rgb_to_oklab((r, g, b): (u8, u8, u8)) -> [f32; 3] {
+    fn linear(v: u8) -> f32 {
+        let value = v as f32 / 255.0;
+        if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    let r = linear(r);
+    let g = linear(g);
+    let b = linear(b);
+    let l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).cbrt();
+    let m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).cbrt();
+    let s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).cbrt();
+
+    [
+        0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+    ]
+}
+
+/// Convert OKLab back to gamma-encoded sRGB, clipping out-of-gamut values.
+fn oklab_to_rgb([lightness, a, b]: [f32; 3]) -> (u8, u8, u8) {
+    let l = (lightness + 0.3963377774 * a + 0.2158037573 * b).powi(3);
+    let m = (lightness - 0.1055613458 * a - 0.0638541728 * b).powi(3);
+    let s = (lightness - 0.0894841775 * a - 1.2914855480 * b).powi(3);
+
+    fn encode(v: f32) -> u8 {
+        let value = if v <= 0.0031308 {
+            12.92 * v
+        } else {
+            1.055 * v.max(0.0).powf(1.0 / 2.4) - 0.055
+        };
+        (value * 255.0).round().clamp(0.0, 255.0) as u8
+    }
+
+    (
+        encode(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+        encode(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+        encode(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s),
+    )
+}
+
+/// Deterministic, bounded k-means clustering in OKLab space. Unlike RGB,
+/// Euclidean distances in OKLab better reflect perceived color differences.
 fn dominant_color(pixels: &[(u8, u8, u8)]) -> Option<(u8, u8, u8)> {
     const CLUSTERS: usize = 5;
     const ITERATIONS: usize = 8;
@@ -229,21 +278,20 @@ fn dominant_color(pixels: &[(u8, u8, u8)]) -> Option<(u8, u8, u8)> {
         return None;
     }
 
-    let to_f32 = |(r, g, b): (u8, u8, u8)| [r as f32, g as f32, b as f32];
+    let points: Vec<[f32; 3]> = pixels.iter().copied().map(rgb_to_oklab).collect();
     let distance = |a: [f32; 3], b: [f32; 3]| {
         (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)
     };
-    let points: Vec<[f32; 3]> = pixels.iter().copied().map(to_f32).collect();
 
-    // Start from the most chromatic sample, then repeatedly choose the point
-    // farthest from its nearest existing center.
-    let first = pixels
+    // Seed with the most chromatic sample, then repeatedly choose the sample
+    // farthest from its nearest center. No randomness means stable output.
+    let first = points
         .iter()
         .enumerate()
         .max_by(|(ia, a), (ib, b)| {
-            let sa = Hsl::from_rgb(**a).s;
-            let sb = Hsl::from_rgb(**b).s;
-            sa.total_cmp(&sb).then_with(|| ib.cmp(ia))
+            let ca = a[1].hypot(a[2]);
+            let cb = b[1].hypot(b[2]);
+            ca.total_cmp(&cb).then_with(|| ib.cmp(ia))
         })?
         .0;
     let mut centers = vec![points[first]];
@@ -263,7 +311,7 @@ fn dominant_color(pixels: &[(u8, u8, u8)]) -> Option<(u8, u8, u8)> {
             .0;
         if centers
             .iter()
-            .any(|center| distance(*center, points[next]) == 0.0)
+            .any(|center| distance(*center, points[next]) <= f32::EPSILON)
         {
             break;
         }
@@ -285,39 +333,32 @@ fn dominant_color(pixels: &[(u8, u8, u8)]) -> Option<(u8, u8, u8)> {
                 })?
                 .0;
             counts[nearest] += 1;
-            sums[nearest][0] += point[0] as f64;
-            sums[nearest][1] += point[1] as f64;
-            sums[nearest][2] += point[2] as f64;
+            for channel in 0..3 {
+                sums[nearest][channel] += point[channel] as f64;
+            }
         }
         for (index, count) in counts.iter().copied().enumerate() {
             if count > 0 {
-                centers[index] = [
-                    (sums[index][0] / count as f64) as f32,
-                    (sums[index][1] / count as f64) as f32,
-                    (sums[index][2] / count as f64) as f32,
-                ];
+                for channel in 0..3 {
+                    centers[index][channel] = (sums[index][channel] / count as f64) as f32;
+                }
             }
         }
     }
 
-    // Favor clusters with both meaningful coverage and chroma: a large neutral
-    // sky or white border should not automatically erase a colorful subject.
-    let best = centers
+    // Chroma-aware coverage scoring prevents large neutral regions from
+    // dominating colorful subjects while retaining meaningful cluster size.
+    centers
         .iter()
         .enumerate()
         .filter(|(index, _)| counts[*index] > 0)
         .map(|(index, center)| {
-            let rgb = (
-                center[0].round().clamp(0.0, 255.0) as u8,
-                center[1].round().clamp(0.0, 255.0) as u8,
-                center[2].round().clamp(0.0, 255.0) as u8,
-            );
-            let saturation = Hsl::from_rgb(rgb).s;
-            let score = counts[index] as f32 * (0.08 + saturation * 1.6);
-            (rgb, score, index)
+            let chroma = center[1].hypot(center[2]);
+            let score = counts[index] as f32 * (0.08 + chroma * 5.0);
+            (oklab_to_rgb(*center), score, index)
         })
-        .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.2.cmp(&a.2)))?;
-    Some(best.0)
+        .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.2.cmp(&a.2)))
+        .map(|best| best.0)
 }
 
 fn validate_options(options: &ThemeOptions) -> Result<(), ThemeError> {
@@ -531,6 +572,31 @@ mod tests {
 
     fn sample_image(color: [u8; 3]) -> DynamicImage {
         DynamicImage::ImageRgb8(RgbImage::from_pixel(32, 32, Rgb(color)))
+    }
+
+    #[test]
+    fn oklab_round_trip_is_close_for_srgb_colors() {
+        for color in [
+            (0, 0, 0),
+            (255, 255, 255),
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (30, 180, 220),
+            (128, 128, 128),
+        ] {
+            let restored = oklab_to_rgb(rgb_to_oklab(color));
+            for (actual, expected) in [
+                (restored.0, color.0),
+                (restored.1, color.1),
+                (restored.2, color.2),
+            ] {
+                assert!(
+                    actual.abs_diff(expected) <= 1,
+                    "round trip {color:?} -> {restored:?}"
+                );
+            }
+        }
     }
 
     #[test]
