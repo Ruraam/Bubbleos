@@ -170,32 +170,12 @@ pub fn generate_from_image(
     }
 
     let sample = image.thumbnail(ANALYSIS_EDGE, ANALYSIS_EDGE).to_rgb8();
-    let mut histogram = std::collections::HashMap::<(u8, u8, u8), u32>::new();
-    let mut sampled_pixels = 0usize;
-
-    // Quantize to 5 bits per channel to keep the histogram bounded.
-    for pixel in sample.pixels() {
-        let [r, g, b] = pixel.0;
-        let key = (r >> 3, g >> 3, b >> 3);
-        *histogram.entry(key).or_insert(0) += 1;
-        sampled_pixels += 1;
-    }
-    if histogram.is_empty() {
-        return Err(ThemeError::NoColorSamples);
-    }
-
-    let mut candidates: Vec<((u8, u8, u8), u32, f32)> = histogram
-        .into_iter()
-        .map(|(key, count)| {
-            let rgb = ((key.0 << 3) | 4, (key.1 << 3) | 4, (key.2 << 3) | 4);
-            let hsl = Hsl::from_rgb(rgb);
-            let chroma_weight = 0.35 + hsl.s * 0.65;
-            let score = count as f32 * chroma_weight;
-            (rgb, count, score)
-        })
+    let pixels: Vec<(u8, u8, u8)> = sample
+        .pixels()
+        .map(|pixel| (pixel[0], pixel[1], pixel[2]))
         .collect();
-    candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
-    let dominant = candidates.first().ok_or(ThemeError::NoColorSamples)?.0;
+    let sampled_pixels = pixels.len();
+    let dominant = dominant_color(&pixels).ok_or(ThemeError::NoColorSamples)?;
     let mut base = Hsl::from_rgb(dominant);
     base.s = match options.personality {
         PalettePersonality::Balanced => base.s.clamp(0.42, 0.72),
@@ -233,6 +213,104 @@ pub fn generate_from_image(
             achieved_text_contrast: achieved,
         },
     })
+}
+
+/// Deterministic, bounded k-means clustering in RGB space. Farthest-point
+/// seeding avoids random initialization and keeps output stable across runs.
+fn dominant_color(pixels: &[(u8, u8, u8)]) -> Option<(u8, u8, u8)> {
+    const CLUSTERS: usize = 5;
+    const ITERATIONS: usize = 8;
+
+    if pixels.is_empty() {
+        return None;
+    }
+
+    let to_f32 = |(r, g, b): (u8, u8, u8)| [r as f32, g as f32, b as f32];
+    let distance = |a: [f32; 3], b: [f32; 3]| {
+        (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)
+    };
+    let points: Vec<[f32; 3]> = pixels.iter().copied().map(to_f32).collect();
+
+    // Start from the most chromatic sample, then repeatedly choose the point
+    // farthest from its nearest existing center.
+    let first = pixels
+        .iter()
+        .enumerate()
+        .max_by(|(ia, a), (ib, b)| {
+            let sa = Hsl::from_rgb(**a).s;
+            let sb = Hsl::from_rgb(**b).s;
+            sa.total_cmp(&sb).then_with(|| ib.cmp(ia))
+        })?
+        .0;
+    let mut centers = vec![points[first]];
+
+    while centers.len() < CLUSTERS.min(points.len()) {
+        let next = points
+            .iter()
+            .enumerate()
+            .map(|(index, point)| {
+                let nearest = centers
+                    .iter()
+                    .map(|center| distance(*point, *center))
+                    .fold(f32::INFINITY, f32::min);
+                (index, nearest)
+            })
+            .max_by(|(ia, da), (ib, db)| da.total_cmp(db).then_with(|| ib.cmp(ia)))?
+            .0;
+        if centers.iter().any(|center| distance(*center, points[next]) == 0.0) {
+            break;
+        }
+        centers.push(points[next]);
+    }
+
+    let mut counts = vec![0usize; centers.len()];
+    for _ in 0..ITERATIONS {
+        let mut sums = vec![[0.0f64; 3]; centers.len()];
+        counts.fill(0);
+        for point in &points {
+            let nearest = centers
+                .iter()
+                .enumerate()
+                .min_by(|(ia, a), (ib, b)| {
+                    distance(*point, **a)
+                        .total_cmp(&distance(*point, **b))
+                        .then_with(|| ia.cmp(ib))
+                })?
+                .0;
+            counts[nearest] += 1;
+            sums[nearest][0] += point[0] as f64;
+            sums[nearest][1] += point[1] as f64;
+            sums[nearest][2] += point[2] as f64;
+        }
+        for (index, count) in counts.iter().copied().enumerate() {
+            if count > 0 {
+                centers[index] = [
+                    (sums[index][0] / count as f64) as f32,
+                    (sums[index][1] / count as f64) as f32,
+                    (sums[index][2] / count as f64) as f32,
+                ];
+            }
+        }
+    }
+
+    // Favor clusters with both meaningful coverage and chroma: a large neutral
+    // sky or white border should not automatically erase a colorful subject.
+    let best = centers
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| counts[*index] > 0)
+        .map(|(index, center)| {
+            let rgb = (
+                center[0].round().clamp(0.0, 255.0) as u8,
+                center[1].round().clamp(0.0, 255.0) as u8,
+                center[2].round().clamp(0.0, 255.0) as u8,
+            );
+            let saturation = Hsl::from_rgb(rgb).s;
+            let score = counts[index] as f32 * (0.35 + saturation * 0.65);
+            (rgb, score, index)
+        })
+        .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.2.cmp(&a.2)))?;
+    Some(best.0)
 }
 
 fn validate_options(options: &ThemeOptions) -> Result<(), ThemeError> {
@@ -486,6 +564,53 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn clustered_palette_prefers_a_colorful_subject_over_neutral_background() {
+        let mut image = RgbImage::from_pixel(64, 64, Rgb([245, 245, 245]));
+        for y in 16..48 {
+            for x in 16..48 {
+                image.put_pixel(x, y, Rgb([20, 190, 210]));
+            }
+        }
+        let theme = generate_from_image(
+            &DynamicImage::ImageRgb8(image),
+            &ThemeOptions::default(),
+            "subject.png",
+        )
+        .unwrap();
+        assert_ne!(theme.diagnostics.dominant_color, "#F4F4F4");
+        assert!(Hsl::from_rgb(parse_hex(&theme.diagnostics.dominant_color).unwrap()).s > 0.5);
+    }
+
+    #[test]
+    fn palette_personality_changes_accent_saturation() {
+        let image = sample_image([70, 120, 190]);
+        let balanced = generate_from_image(&image, &ThemeOptions::default(), "wall.png").unwrap();
+        let vivid = generate_from_image(
+            &image,
+            &ThemeOptions {
+                personality: PalettePersonality::Vivid,
+                ..ThemeOptions::default()
+            },
+            "wall.png",
+        )
+        .unwrap();
+        let muted = generate_from_image(
+            &image,
+            &ThemeOptions {
+                personality: PalettePersonality::Muted,
+                ..ThemeOptions::default()
+            },
+            "wall.png",
+        )
+        .unwrap();
+        let saturation = |theme: &ThemeDocument| {
+            Hsl::from_rgb(parse_hex(&theme.colors.primary).unwrap()).s
+        };
+        assert!(saturation(&vivid) > saturation(&balanced));
+        assert!(saturation(&balanced) > saturation(&muted));
     }
 
     #[test]
