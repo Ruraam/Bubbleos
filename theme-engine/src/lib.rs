@@ -46,7 +46,7 @@ impl Default for ThemeOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ThemeColors {
     pub primary: String,
     pub on_primary: String,
