@@ -34,7 +34,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut options = ThemeOptions::default();
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--wallpaper" => wallpaper = Some(args.next().ok_or("--wallpaper requires a path")?.into()),
+            "--wallpaper" => {
+                wallpaper = Some(args.next().ok_or("--wallpaper requires a path")?.into())
+            }
             "--output" => output = Some(args.next().ok_or("--output requires a path")?.into()),
             "--mode" => {
                 options.mode = match args.next().as_deref() {
@@ -64,7 +66,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string_pretty(&theme)?;
 
     if let Some(path) = output {
-        let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(std::path::Path::new("."));
         std::fs::create_dir_all(parent)?;
         let temp = path.with_extension("json.tmp");
         std::fs::write(&temp, format!("{json}\n"))?;
