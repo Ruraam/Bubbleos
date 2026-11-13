@@ -177,13 +177,17 @@ pub fn generate_from_image(
     let sampled_pixels = pixels.len();
     let dominant = dominant_color(&pixels).ok_or(ThemeError::NoColorSamples)?;
     let mut base = Hsl::from_rgb(dominant);
-    base.s = match options.personality {
-        PalettePersonality::Balanced => base.s.clamp(0.42, 0.72),
-        PalettePersonality::Vivid => base.s.clamp(0.68, 0.92),
-        PalettePersonality::Muted => base.s.clamp(0.24, 0.48),
-    };
-    if base.s < 0.18 {
+    if base.s < 0.08 {
+        // A grayscale wallpaper has no hue to preserve; use a calm cyan-blue
+        // seed rather than letting floating-point hue noise pick an accent.
+        base.h = 195.0;
         base.s = 0.52;
+    } else {
+        base.s = match options.personality {
+            PalettePersonality::Balanced => base.s.clamp(0.42, 0.72),
+            PalettePersonality::Vivid => base.s.clamp(0.68, 0.92),
+            PalettePersonality::Muted => base.s.clamp(0.24, 0.48),
+        };
     }
 
     let colors = build_colors(base, options);
@@ -309,7 +313,7 @@ fn dominant_color(pixels: &[(u8, u8, u8)]) -> Option<(u8, u8, u8)> {
                 center[2].round().clamp(0.0, 255.0) as u8,
             );
             let saturation = Hsl::from_rgb(rgb).s;
-            let score = counts[index] as f32 * (0.35 + saturation * 0.65);
+            let score = counts[index] as f32 * (0.08 + saturation * 1.6);
             (rgb, score, index)
         })
         .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.2.cmp(&a.2)))?;
@@ -589,7 +593,7 @@ mod tests {
 
     #[test]
     fn palette_personality_changes_accent_saturation() {
-        let image = sample_image([70, 120, 190]);
+        let image = sample_image([30, 80, 220]);
         let balanced = generate_from_image(&image, &ThemeOptions::default(), "wall.png").unwrap();
         let vivid = generate_from_image(
             &image,
