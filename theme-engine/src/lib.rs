@@ -149,7 +149,13 @@ pub fn generate_from_path(
         .limits(limits)
         .decode()?;
 
-    generate_from_image(&image, options, path.file_name().and_then(|n| n.to_str()).unwrap_or("wallpaper"))
+    generate_from_image(
+        &image,
+        options,
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("wallpaper"),
+    )
 }
 
 /// Generate a deterministic theme from an already decoded image.
@@ -264,7 +270,11 @@ impl Hsl {
         } else {
             60.0 * ((r - g) / delta + 4.0)
         };
-        Self { h: h.rem_euclid(360.0), s, l }
+        Self {
+            h: h.rem_euclid(360.0),
+            s,
+            l,
+        }
     }
 
     fn rgb(self) -> (u8, u8, u8) {
@@ -291,8 +301,16 @@ fn build_colors(base: Hsl, options: &ThemeOptions) -> ThemeColors {
     let dark = options.mode == ColorMode::Dark;
     let primary = tone(base, if dark { 0.78 } else { 0.40 });
     let primary_container = tone(base, if dark { 0.30 } else { 0.88 });
-    let secondary_hsl = Hsl { h: base.h + 36.0, s: (base.s * 0.72).clamp(0.25, 0.68), l: base.l };
-    let tertiary_hsl = Hsl { h: base.h + 300.0, s: (base.s * 0.82).clamp(0.30, 0.78), l: base.l };
+    let secondary_hsl = Hsl {
+        h: base.h + 36.0,
+        s: (base.s * 0.72).clamp(0.25, 0.68),
+        l: base.l,
+    };
+    let tertiary_hsl = Hsl {
+        h: base.h + 300.0,
+        s: (base.s * 0.82).clamp(0.30, 0.78),
+        l: base.l,
+    };
     let secondary = tone(secondary_hsl, if dark { 0.76 } else { 0.42 });
     let secondary_container = tone(secondary_hsl, if dark { 0.28 } else { 0.90 });
     let tertiary = tone(tertiary_hsl, if dark { 0.78 } else { 0.40 });
@@ -316,25 +334,49 @@ fn build_colors(base: Hsl, options: &ThemeOptions) -> ThemeColors {
     let info = (50, 130, 210);
 
     ThemeColors {
-        primary: hex(primary), on_primary: hex(on_primary),
-        primary_container: hex(primary_container), on_primary_container: hex(on_primary_container),
-        secondary: hex(secondary), on_secondary: hex(on_secondary),
-        secondary_container: hex(secondary_container), on_secondary_container: hex(on_secondary_container),
-        tertiary: hex(tertiary), on_tertiary: hex(on_tertiary),
-        tertiary_container: hex(tertiary_container), on_tertiary_container: hex(on_tertiary_container),
-        background: hex(background), on_background: hex(on_background),
-        surface: hex(surface), on_surface: hex(on_surface),
-        surface_variant: hex(surface_variant), on_surface_variant: hex(on_surface_variant),
+        primary: hex(primary),
+        on_primary: hex(on_primary),
+        primary_container: hex(primary_container),
+        on_primary_container: hex(on_primary_container),
+        secondary: hex(secondary),
+        on_secondary: hex(on_secondary),
+        secondary_container: hex(secondary_container),
+        on_secondary_container: hex(on_secondary_container),
+        tertiary: hex(tertiary),
+        on_tertiary: hex(on_tertiary),
+        tertiary_container: hex(tertiary_container),
+        on_tertiary_container: hex(on_tertiary_container),
+        background: hex(background),
+        on_background: hex(on_background),
+        surface: hex(surface),
+        on_surface: hex(on_surface),
+        surface_variant: hex(surface_variant),
+        on_surface_variant: hex(on_surface_variant),
         surface_elevated: hex(if dark { (29, 33, 47) } else { (255, 255, 255) }),
         surface_overlay: hex(if dark { (34, 39, 55) } else { (242, 240, 248) }),
-        outline: hex(if dark { (143, 147, 164) } else { (104, 101, 117) }),
+        outline: hex(if dark {
+            (143, 147, 164)
+        } else {
+            (104, 101, 117)
+        }),
         outline_variant: hex(if dark { (67, 71, 88) } else { (198, 195, 208) }),
-        error: hex(error), on_error: hex(readable_foreground(error, options.contrast_target)),
-        success: hex(success), warning: hex(warning), info: hex(info),
+        error: hex(error),
+        on_error: hex(readable_foreground(error, options.contrast_target)),
+        success: hex(success),
+        warning: hex(warning),
+        info: hex(info),
         glass_tint: hex(if dark { primary_container } else { primary }),
         glass_opacity: if dark { 0.78 } else { 0.86 },
-        glass_border: hex(if dark { (95, 105, 133) } else { (180, 176, 199) }),
-        glass_highlight: hex(if dark { (185, 205, 255) } else { (255, 255, 255) }),
+        glass_border: hex(if dark {
+            (95, 105, 133)
+        } else {
+            (180, 176, 199)
+        }),
+        glass_highlight: hex(if dark {
+            (185, 205, 255)
+        } else {
+            (255, 255, 255)
+        }),
         glass_shadow: hex((0, 0, 0)),
         neon_cyan: hex((45, 225, 235)),
         neon_magenta: hex((245, 65, 190)),
@@ -353,15 +395,25 @@ fn readable_foreground(background: (u8, u8, u8), target: f32) -> (u8, u8, u8) {
     let white = (255, 255, 255);
     let black_ratio = contrast_ratio(black, background);
     let white_ratio = contrast_ratio(white, background);
-    if black_ratio >= target && black_ratio >= white_ratio { black }
-    else if white_ratio >= target { white }
-    else if black_ratio >= white_ratio { black } else { white }
+    if black_ratio >= target && black_ratio >= white_ratio {
+        black
+    } else if white_ratio >= target {
+        white
+    } else if black_ratio >= white_ratio {
+        black
+    } else {
+        white
+    }
 }
 
 fn luminance((r, g, b): (u8, u8, u8)) -> f32 {
     fn channel(v: u8) -> f32 {
         let c = v as f32 / 255.0;
-        if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
     }
     0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 }
@@ -378,7 +430,9 @@ fn hex((r, g, b): (u8, u8, u8)) -> String {
 
 fn parse_hex(value: &str) -> Option<(u8, u8, u8)> {
     let value = value.strip_prefix('#')?;
-    if value.len() != 6 { return None; }
+    if value.len() != 6 {
+        return None;
+    }
     Some((
         u8::from_str_radix(&value[0..2], 16).ok()?,
         u8::from_str_radix(&value[2..4], 16).ok()?,
@@ -407,25 +461,40 @@ mod tests {
     #[test]
     fn semantic_text_colors_meet_contrast_target() {
         for mode in [ColorMode::Dark, ColorMode::Light] {
-            let options = ThemeOptions { mode, ..ThemeOptions::default() };
-            let theme = generate_from_image(&sample_image([220, 40, 120]), &options, "wall.png").unwrap();
+            let options = ThemeOptions {
+                mode,
+                ..ThemeOptions::default()
+            };
+            let theme =
+                generate_from_image(&sample_image([220, 40, 120]), &options, "wall.png").unwrap();
             let pairs = [
                 (&theme.colors.on_background, &theme.colors.background),
                 (&theme.colors.on_surface, &theme.colors.surface),
-                (&theme.colors.on_surface_variant, &theme.colors.surface_variant),
+                (
+                    &theme.colors.on_surface_variant,
+                    &theme.colors.surface_variant,
+                ),
                 (&theme.colors.on_primary, &theme.colors.primary),
                 (&theme.colors.on_secondary, &theme.colors.secondary),
                 (&theme.colors.on_tertiary, &theme.colors.tertiary),
             ];
             for (foreground, background) in pairs {
-                assert!(contrast_ratio(parse_hex(foreground).unwrap(), parse_hex(background).unwrap()) >= options.contrast_target);
+                assert!(
+                    contrast_ratio(
+                        parse_hex(foreground).unwrap(),
+                        parse_hex(background).unwrap()
+                    ) >= options.contrast_target
+                );
             }
         }
     }
 
     #[test]
     fn invalid_contrast_target_is_rejected() {
-        let options = ThemeOptions { contrast_target: 3.0, ..ThemeOptions::default() };
+        let options = ThemeOptions {
+            contrast_target: 3.0,
+            ..ThemeOptions::default()
+        };
         assert!(matches!(
             generate_from_image(&sample_image([10, 20, 30]), &options, "wall.png"),
             Err(ThemeError::InvalidContrastTarget)
@@ -438,13 +507,19 @@ mod tests {
             &sample_image([128, 128, 128]),
             &ThemeOptions::default(),
             "gray.png",
-        ).unwrap();
+        )
+        .unwrap();
         assert_ne!(theme.colors.primary, "#808080");
     }
 
     #[test]
     fn output_has_a_versioned_schema() {
-        let theme = generate_from_image(&sample_image([50, 100, 200]), &ThemeOptions::default(), "wall.png").unwrap();
+        let theme = generate_from_image(
+            &sample_image([50, 100, 200]),
+            &ThemeOptions::default(),
+            "wall.png",
+        )
+        .unwrap();
         let json = serde_json::to_value(theme).unwrap();
         assert_eq!(json["schema_version"], SCHEMA_VERSION);
         assert!(json["colors"]["neon_cyan"].is_string());
