@@ -10,7 +10,8 @@ trusted command as the selected user. A one-login helper composes those steps
 and cleans up the process group before closing PAM. No system greeter invokes
 it yet, so BubbleWM does not supervise a full login session. The production
 supervisor still needs logind/systemd cgroup cleanup for descendants that
-leave the process group.
+leave the process group. BubbleWM now includes a Debian-compatible PAM
+service profile, but no BubbleOS package installs it yet.
 
 The desktop-enabled BubbleOS development image currently uses
 `greetd`/`tuigreet` to authenticate on VT 7 and launch `bubble-desktop
