@@ -49,6 +49,8 @@
 - `config/` — system and image configuration (including the RootFS UUID)
 - `packages/` — BubbleOS package definitions
 - `docs/` — architecture and development documentation
+
+BubbleWM is the planned Wayland-only graphical login/session manager and desktop compositor; it is not integrated yet. See the [integration plan](docs/BUBBLEWM-INTEGRATION.md).
 - `theme-engine/` — standalone Rust library and CLI for wallpaper-derived semantic colors
 
 BubbleThemeEngine milestone 1 is present on this branch. Bootstrap builds `/usr/bin/bubble-theme` by default (`BUILD_THEME_ENGINE=0` skips it); the CLI analyzes a local wallpaper and emits versioned semantic-color JSON. No desktop service consumes that output automatically yet. See [docs/BUBBLE-THEME-ENGINE.md](docs/BUBBLE-THEME-ENGINE.md) for its status and integration plan.
