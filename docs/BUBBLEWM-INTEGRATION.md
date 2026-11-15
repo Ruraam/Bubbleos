@@ -6,11 +6,11 @@ BubbleWM is developed in its own repository. It has a nested Wayland
 compositor, an initial single-output DRM/KMS backend using libseat, GBM/EGL
 and libinput, and a built-in lock screen. It also has fixed-service PAM
 helpers for account authentication, PAM session open/close, and launching a
-trusted command as the selected user. No greeter or session supervisor
-coordinates them yet, so BubbleWM does not supervise a full login session.
-The launcher can terminate its dedicated process group and reap the session
-leader; the production supervisor still needs logind/systemd cgroup cleanup
-for descendants that leave that group.
+trusted command as the selected user. A one-login helper composes those steps
+and cleans up the process group before closing PAM. No system greeter invokes
+it yet, so BubbleWM does not supervise a full login session. The production
+supervisor still needs logind/systemd cgroup cleanup for descendants that
+leave the process group.
 
 The desktop-enabled BubbleOS development image currently uses
 `greetd`/`tuigreet` to authenticate on VT 7 and launch `bubble-desktop
