@@ -65,6 +65,18 @@ sudo ROOT_IMAGE=out/bubbleos-root.img ./build/run-qemu.sh
 ./build/run-qemu.sh                    # initramfs rescue shell, no disk
 ```
 
+## BubbleThemeEngine CLI
+
+`build/bootstrap.sh` builds the standalone Rust CLI in the target chroot by default, installs only `/usr/bin/bubble-theme`, and removes the temporary Cargo/Rust toolchain and source tree before APT is removed. Set `BUILD_THEME_ENGINE=0` to omit the CLI. The build downloads locked crate sources from crates.io, so the chroot needs network access.
+
+Generate a versioned semantic palette from a local wallpaper:
+
+```bash
+bubble-theme generate --wallpaper /path/to/wallpaper.png --mode dark --personality balanced
+```
+
+The JSON is written to stdout unless `--output <FILE>` is supplied. This milestone provides palette generation and inspection; it does not run a theme daemon or apply colors to a desktop session.
+
 ## Kernel
 
 By default `build/build-kernel.sh` imports the locally built bubbleOS kernel:
