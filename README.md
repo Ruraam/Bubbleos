@@ -52,7 +52,7 @@
 
 - `theme-engine/` — standalone Rust library and CLI for wallpaper-derived semantic colors
 
-BubbleWM is developed in its own repository and has an initial single-output DRM/KMS backend plus a fixed-service PAM authentication helper. Its greeter and user-session lifecycle are not implemented, and it is not integrated with BubbleOS yet. See the [integration plan](docs/BUBBLEWM-INTEGRATION.md).
+BubbleWM is developed in its own repository and has an initial single-output DRM/KMS backend plus PAM helpers for account authentication, session lifecycle and launching a trusted command as the selected user. No greeter or supervisor coordinates them yet, and BubbleWM is not integrated with BubbleOS. See the [integration plan](docs/BUBBLEWM-INTEGRATION.md).
 
 BubbleThemeEngine milestone 1 is present on this branch. Bootstrap builds `/usr/bin/bubble-theme` by default (`BUILD_THEME_ENGINE=0` skips it); the CLI analyzes a local wallpaper and emits versioned semantic-color JSON. No desktop service consumes that output automatically yet. See [docs/BUBBLE-THEME-ENGINE.md](docs/BUBBLE-THEME-ENGINE.md) for its status and integration plan.
 
