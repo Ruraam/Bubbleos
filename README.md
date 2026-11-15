@@ -57,6 +57,14 @@ BubbleThemeEngine milestone 1 is present on this branch. Bootstrap builds `/usr/
 bubble-theme generate --wallpaper /path/to/wallpaper.png --mode dark --personality balanced
 ```
 
+Export the generated semantic colors for an existing Waybar stylesheet:
+
+```bash
+bubble-theme export-waybar \
+  --theme /tmp/bubble-theme.json \
+  --base-style /path/to/style.css
+```
+
 ---
 
 ## Current status
