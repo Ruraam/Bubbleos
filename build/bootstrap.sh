@@ -28,6 +28,7 @@ source "$CONFIG"
 SUITE="${SUITE:-stable}"
 MIRROR="${MIRROR:-https://deb.debian.org/debian}"
 KEEP_APT="${KEEP_APT:-0}"
+BUILD_THEME_ENGINE="${BUILD_THEME_ENGINE:-1}"
 SYSTEMD="${SYSTEMD:-1}"
 ROOT_PASSWORD="${ROOT_PASSWORD:-bubble}"
 KERNEL_ENV="${KERNEL_ENV:-$BUILD_DIR/kernel/kernel.env}"
@@ -52,6 +53,8 @@ need() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"; 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || die "Run this build step as root (or via sudo)."
 [[ "$SYSTEMD" == "0" || "$SYSTEMD" == "1" ]] || die "SYSTEMD must be 0 or 1"
 [[ "$SYSTEMD" == "0" || -n "$ROOT_PASSWORD" ]] || die "ROOT_PASSWORD must not be empty"
+[[ "$BUILD_THEME_ENGINE" == "0" || "$BUILD_THEME_ENGINE" == "1" ]] ||
+    die "BUILD_THEME_ENGINE must be 0 or 1"
 if [[ "$SYSTEMD" == "1" ]]; then
     INIT_NAME="systemd"
 else
@@ -379,6 +382,47 @@ rm -f "$ROOTFS/var/log/README"
 
 # D-Bus is managed by systemd; the SysV compatibility script is not needed.
 rm -f "$ROOTFS"/etc/rc[2-5].d/S01dbus "$ROOTFS/etc/init.d/dbus"
+
+# ------------------------------------------------------------------------------
+# BubbleThemeEngine (standalone wallpaper palette generator)
+# ------------------------------------------------------------------------------
+# Build inside the target chroot so the binary matches its libc. Keep only the
+# CLI in the image; the temporary Rust toolchain, source and Cargo cache are
+# removed before APT is stripped.
+if [[ "$BUILD_THEME_ENGINE" == "1" ]]; then
+    log "Building BubbleThemeEngine in the target RootFS"
+    theme_src="$ROOTFS/usr/src/bubbleos/theme-engine"
+    install -d -m 0755 "$theme_src"
+    cp -a "$ROOT/theme-engine/." "$theme_src/"
+    chown -R root:root "$theme_src"
+
+    chroot "$ROOTFS" sh -c \
+        'apt-mark showauto 2>/dev/null | xargs -r apt-mark manual >/dev/null 2>&1 || true'
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get update -qq
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y -qq --no-install-recommends cargo rustc
+    chroot "$ROOTFS" cargo build --release --locked \
+        --manifest-path /usr/src/bubbleos/theme-engine/Cargo.toml
+    install -D -m 0755 \
+        "$theme_src/target/release/bubble-theme" \
+        "$ROOTFS/usr/bin/bubble-theme"
+    chroot "$ROOTFS" /usr/bin/bubble-theme --help >/dev/null
+    rm -rf "$theme_src" "$ROOTFS/root/.cargo"
+
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get purge -y -qq cargo rustc
+    chroot "$ROOTFS" env DEBIAN_FRONTEND=noninteractive \
+        apt-get autoremove -y -qq --purge
+    chroot "$ROOTFS" ldconfig >/dev/null 2>&1 || true
+
+    if chroot "$ROOTFS" sh -c 'command -v cargo >/dev/null 2>&1 || command -v rustc >/dev/null 2>&1'; then
+        die "the Rust toolchain is still present in the target RootFS"
+    fi
+    chroot "$ROOTFS" test -x /usr/bin/bubble-theme ||
+        die "bubble-theme was not installed"
+    log "BubbleThemeEngine installed"
+fi
 
 # ------------------------------------------------------------------------------
 # Package manager
