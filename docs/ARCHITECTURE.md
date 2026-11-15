@@ -31,6 +31,10 @@ The `bubble/` layer owns operating-system concerns:
 - rollback orchestration;
 - boot integration (generation validation and boot records).
 
+## Planned graphical login and desktop
+
+The `tests` branch currently remains console-only. The planned graphical stack is BubbleWM, maintained in its own repository, as the Wayland-only login/session manager and compositor. It is intended to replace the display-manager and compositor path in desktop-enabled BubbleOS images and to be packageable as a replacement for LightDM or another display manager on other distributions. BubbleWM does not yet implement the greeter or system session lifecycle. See [the integration plan](BUBBLEWM-INTEGRATION.md).
+
 ## Generation model
 
 A generation is a writable Btrfs subvolume containing a complete system root.
