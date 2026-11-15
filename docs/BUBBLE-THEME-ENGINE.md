@@ -1,6 +1,6 @@
 # BubbleOS Theme Engine — Architecture & Implementation Plan
 
-**Status:** milestone 1 implemented as a standalone Rust library and diagnostic CLI; service and desktop integration remain future work  
+**Status:** standalone library, palette CLI and Waybar CSS exporter implemented; theme service and automatic desktop integration remain future work  
 **Target:** BubbleOS desktop, BubbleWM integration, and native Bubble applications  
 **Branch:** `tests` (ported from `feature/bubble-theme-engine`)
 
@@ -24,7 +24,7 @@ At the time of this design pass, the default branch contains:
 - ULPM/LPK integration and package-category placeholders.
 - Documentation for boot, generations and system architecture.
 
-The original audit found no desktop theme subsystem. Branch `tests` now contains the standalone `theme-engine/` library and CLI from milestone 1. The repository still has no theme service, appearance settings application, or IPC path that applies generated tokens to the installed desktop, so those later stages remain explicitly out of scope for this milestone.
+The original audit found no desktop theme subsystem. Branch `tests` contains the standalone `theme-engine/` library and CLI, including an optional exporter that maps semantic colors into a Waybar GTK CSS stylesheet. The branch does not yet install or launch a desktop session, so tokens are not applied automatically. The theme service, appearance settings application and IPC remain future stages.
 
 BubbleWM lives in its own repository and should remain independently usable. Integration will happen through a documented, versioned interface rather than by coupling the compositor to BubbleOS internals.
 
