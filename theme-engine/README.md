@@ -27,9 +27,9 @@ Without `--output`, the JSON document is written to stdout.
 Export its semantic roles as a Waybar GTK CSS stylesheet while retaining the base layout and selectors:
 
 ```sh
-bubble-theme export-waybar \\
-  --theme /tmp/bubble-theme.json \\
-  --base-style /usr/share/bubbleos/desktop/waybar/style.css \\
+bubble-theme export-waybar \
+  --theme /tmp/bubble-theme.json \
+  --base-style /usr/share/bubbleos/desktop/waybar/style.css \
   --output /tmp/bubble-theme-waybar.css
 ```
 
