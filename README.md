@@ -49,6 +49,9 @@
 - `config/` — system and image configuration (including the RootFS UUID)
 - `packages/` — BubbleOS package definitions
 - `docs/` — architecture and development documentation
+- `theme-engine/` — standalone Rust library and CLI for wallpaper-derived semantic colors
+
+BubbleThemeEngine milestone 1 is present on this branch. It analyzes local wallpaper files and emits versioned semantic-color JSON; the installed desktop, BubbleSettings and BubbleWM do not consume that output yet. See [docs/BUBBLE-THEME-ENGINE.md](docs/BUBBLE-THEME-ENGINE.md) for its status and integration plan.
 
 ---
 
