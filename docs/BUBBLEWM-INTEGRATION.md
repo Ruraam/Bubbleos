@@ -2,10 +2,11 @@
 
 ## Status
 
-BubbleWM is developed in its own repository. It is currently an early nested
-Wayland compositor prototype with a built-in lock screen. It does not yet
-provide a system login greeter, create an authenticated user session, or manage
-session start and shutdown.
+BubbleWM is developed in its own repository. It has a nested Wayland
+compositor, an initial single-output DRM/KMS backend using libseat, GBM/EGL
+and libinput, and a built-in lock screen. It does not yet provide a system
+login greeter, create an authenticated user session, or manage session start
+and shutdown.
 
 The desktop-enabled BubbleOS development image currently uses
 `greetd`/`tuigreet` to authenticate on VT 7 and launch `bubble-desktop
@@ -44,7 +45,8 @@ only for an already logged-in user and stays a separate operation from login.
 
 ## Migration sequence
 
-1. Finish the native DRM/KMS backend and seat/session handling.
+1. Validate and harden BubbleWM's existing single-output DRM/KMS and libseat
+   path; add the output coverage required for BubbleOS hardware.
 2. Implement and review the greeter, PAM/logind session creation, privilege
    separation, logout and crash cleanup.
 3. Package BubbleWM for BubbleOS and validate successful login, rejected
