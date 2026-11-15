@@ -24,6 +24,15 @@ cargo run --release -- generate \
 
 Without `--output`, the JSON document is written to stdout.
 
+Export its semantic roles as a Waybar GTK CSS stylesheet while retaining the base layout and selectors:
+
+```sh
+bubble-theme export-waybar \\
+  --theme /tmp/bubble-theme.json \\
+  --base-style /usr/share/bubbleos/desktop/waybar/style.css \\
+  --output /tmp/bubble-theme-waybar.css
+```
+
 ## Initial scope
 
 - Local image analysis only; no network access or wallpaper upload.
@@ -32,6 +41,7 @@ Without `--output`, the JSON document is written to stdout.
 - Semantic palette generation with balanced, vivid and muted accent personalities.
 - Dark and light modes, balanced/vivid/muted palette personalities.
 - WCAG contrast calculation and readable foreground selection.
-- Versioned JSON output, independent of GTK, Qt and BubbleWM.
+- Versioned JSON output and a GTK CSS color-token adapter for Waybar.
+- Independent of GTK, Qt and BubbleWM; the CLI does not run a daemon.
 
-The first implementation intentionally does not watch wallpaper changes, manage preferences, run a daemon, or apply compositor effects. Those belong to later milestones.
+The engine does not watch wallpaper changes, manage preferences, run a daemon, or apply compositor effects. Those belong to later milestones.
