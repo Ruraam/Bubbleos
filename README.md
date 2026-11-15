@@ -51,7 +51,11 @@
 - `docs/` — architecture and development documentation
 - `theme-engine/` — standalone Rust library and CLI for wallpaper-derived semantic colors
 
-BubbleThemeEngine milestone 1 is present on this branch. It analyzes local wallpaper files and emits versioned semantic-color JSON; the installed desktop, BubbleSettings and BubbleWM do not consume that output yet. See [docs/BUBBLE-THEME-ENGINE.md](docs/BUBBLE-THEME-ENGINE.md) for its status and integration plan.
+BubbleThemeEngine milestone 1 is present on this branch. Bootstrap builds `/usr/bin/bubble-theme` by default (`BUILD_THEME_ENGINE=0` skips it); the CLI analyzes a local wallpaper and emits versioned semantic-color JSON. No desktop service consumes that output automatically yet. See [docs/BUBBLE-THEME-ENGINE.md](docs/BUBBLE-THEME-ENGINE.md) for its status and integration plan.
+
+```bash
+bubble-theme generate --wallpaper /path/to/wallpaper.png --mode dark --personality balanced
+```
 
 ---
 
