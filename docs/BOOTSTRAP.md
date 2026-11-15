@@ -75,7 +75,7 @@ Generate a versioned semantic palette from a local wallpaper:
 bubble-theme generate --wallpaper /path/to/wallpaper.png --mode dark --personality balanced
 ```
 
-The JSON is written to stdout unless `--output <FILE>` is supplied. This milestone provides palette generation and inspection; it does not run a theme daemon or apply colors to a desktop session.
+The JSON is written to stdout unless `--output <FILE>` is supplied. Export colors for an existing Waybar stylesheet with `bubble-theme export-waybar --theme <JSON> --base-style <CSS> [--output <CSS>]`. This emits a CSS file but does not launch a desktop session or apply it automatically.
 
 ## Kernel
 
