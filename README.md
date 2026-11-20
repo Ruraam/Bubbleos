@@ -10,7 +10,7 @@
 
 <div align="center">
   <img src="assets/bubbleos-fuzzle_1.png" alt="Bubble desktop development preview" width="100%" />
-  <sub>Bubble desktop development preview. The integrated BubbleWM desktop is still in development.</sub>
+  <sub>BubbleOS running on bare-metal hardware (Intel Core i7-860, NVIDIA GeForce GTX 1050 Ti, 10 GB DDR3). The integrated BubbleWM desktop is still in development.</sub>
 </div>
 
 ---
@@ -19,7 +19,7 @@
 
 BubbleOS is an independent Linux operating system project. It combines a Linux kernel and a conventional Unix filesystem layout with a Btrfs-based system-generation model, a custom early-boot environment, and the ULPM / LPK package ecosystem.
 
-Development is happening in stages. The current priorities are a reliable boot path, safe system-generation management, recovery behavior and repeatable QEMU testing. The integrated desktop experience is a separate work in progress.
+Development is happening in stages. The current priorities are a reliable boot path, safe system-generation management, recovery behavior and validation on both physical hardware and QEMU. QEMU provides repeatable, isolated testing; it is not the target platform. The integrated desktop experience is a separate work in progress.
 
 **Important:** BubbleOS is not yet a finished immutable distribution. The current generation layout and rollback mechanisms are implemented, but the active root generation is currently mounted writable. Read-only root enforcement and package-driven generation composition remain future work.
 
@@ -40,7 +40,7 @@ The table describes the current development implementation, not a production rel
 
 | Area | Current state |
 | --- | --- |
-| UEFI boot | Implemented and exercised in QEMU with Limine |
+| UEFI boot | Implemented; exercised in QEMU and booted on physical hardware with Limine |
 | Linux kernel | Local kernel import supported; documented development image uses Linux 7.3.1 |
 | Early userspace | BusyBox initramfs with Btrfs/storage support and optional early microcode |
 | Root filesystem | Btrfs image with separate subvolumes |
@@ -62,6 +62,20 @@ The table describes the current development implementation, not a production rel
 - The current development image is designed for serial-console testing in QEMU. It is not yet a polished installer or end-user live image.
 - SELinux support is compiled into the documented kernel build, but the image does not ship a policy and currently boots with `selinux=0`. SELinux enforcement is therefore not active.
 - The bootstrap process uses Debian `debootstrap` to assemble the initial RootFS. This is a build-time dependency, not the intended package interface of the installed target system.
+
+## Bare-metal hardware testing
+
+BubbleOS has been booted and tested directly on a physical PC, not only in a virtual machine. The development system shown in the screenshot above is running on this hardware:
+
+| Component | Hardware |
+| --- | --- |
+| CPU | Intel Core i7-860 |
+| GPU | NVIDIA GeForce GTX 1050 Ti |
+| Memory | 10 GB DDR3 |
+
+This is a real-world development test on older desktop hardware. It demonstrates that BubbleOS can boot outside QEMU on this particular configuration; it is not a claim of universal hardware compatibility or complete driver support.
+
+QEMU remains part of the development workflow for repeatable boot, generation, fallback, snapshot and ULPM integration tests. Bare-metal testing complements those virtualized tests and helps expose firmware, graphics, storage and hardware-specific issues.
 
 ## System architecture
 
